@@ -20,6 +20,9 @@ python scripts/run_pipeline.py --config configs/btc4h.yaml
             - Core Properties
    -  Create a raw functionable complete workflow
        - Full run of five agents
+       - Related Repositories
+            - [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN)
+           - [TradingAgents](https://github.com/TauricResearch/TradingAgents)
 
 
 
