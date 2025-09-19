@@ -1,4 +1,4 @@
-# Phase 1.1 — Prices + LLM Dual-Stream News
+# Phase 1.1 — Get Price Data + Get Micro & Macro News
 
 ## Run
 ```bash
