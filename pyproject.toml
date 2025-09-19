@@ -1,0 +1,27 @@
+[project]
+name = "trading-agents-phase1"
+version = "0.1.0"
+description = "Phase 1.1 data pipeline (prices + LLM dual-stream news)"
+authors = [{name="Yuhao Li", email="li88@sas.upenn.edu"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+    "numpy",
+    "python-dateutil",
+    "pydantic>=2.0,<3.0",
+    "pyyaml",
+    "matplotlib",
+    "requests",
+    "ccxt",
+    "python-dotenv",
+    "openai",
+    "beautifulsoup4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

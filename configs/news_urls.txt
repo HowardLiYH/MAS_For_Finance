@@ -1,0 +1,3 @@
+https://www.coindesk.com/.../some-article
+https://www.reuters.com/.../some-article
+https://www.cointelegraph.com/.../some-article

@@ -1,0 +1,35 @@
+# Phase 1.1 config
+
+################################################################
+# General Information on Underlying Asset and Data Paths
+################################################################
+symbol: "BTC/USD"
+timeframe: "4h"
+max_days: 120
+out_dir: "./data"
+offline_prices_csv: "./data/btc_4h.csv"
+offline_news_jsonl: "./data/news.jsonl"
+news_lookback_days: 14
+exchange_id: "kraken"
+
+
+###################################################################
+# News Retrieval and LLM Configuration
+###################################################################
+news_query: "bitcoin OR BTC"
+use_llm_news: true
+search_provider: "serpapi"
+llm_model: "gpt-4o-mini"
+max_news_per_stream: 10
+max_search_results_per_stream: 50
+
+
+
+
+
+            # set to true to use OpenAI real mode
+news_candidate_urls_path: ./configs/news_urls.txt
+require_published_signal: true
+
+
+max_search_results_per_stream: 50
