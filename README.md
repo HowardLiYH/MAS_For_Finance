@@ -7,6 +7,7 @@ pip install -e .
 python scripts/run_pipeline.py --config configs/btc4h.yaml
 ```
 
+
 ## 📅 Meeting Notes
 - Sep 18：
    -  Draw a UML diagram first
@@ -89,7 +90,7 @@ Our model incorporates five types of agents to replicate the workflow pipeline o
 
 ## Overall Workflow
 <img width="1369" height="1132" alt="image" src="https://github.com/user-attachments/assets/de2d3d97-c266-4992-9a80-182946cb3611" />
-
+<img width="3840" height="2545" alt="1 3 Single‑iteration sequence (with pass _ Mermaid Chart-2025-10-03-053857" src="https://github.com/user-attachments/assets/4bf2edcc-78cf-406f-9563-306a42766e91" />
 
 Part (1): **Agents Simulating a Hedge Fund Pipeline**  
 - Each step draws methods from the inventory.  
