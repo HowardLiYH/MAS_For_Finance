@@ -212,6 +212,7 @@ Ensures Trader execution is safe:
 - **Soft Fail:** Violates minor rule (e.g., too high leverage) but can be adjusted  
 - **Hard Fail:** Breaches critical rule (e.g., margin call imminent) → discarded  
 <img width="1420" height="651" alt="image" src="https://github.com/user-attachments/assets/4ab44c8b-060d-439c-9c96-e6093f1862d4" />
+<img width="800" height="1000" alt="1 4 Risk analysis activity _ Mermaid Chart-2025-10-03-054441" src="https://github.com/user-attachments/assets/6c74d7d2-800d-400c-a863-114b7c459f31" />
 
 ---
 
