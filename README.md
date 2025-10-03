@@ -212,7 +212,7 @@ Ensures Trader execution is safe:
 - **Soft Fail:** Violates minor rule (e.g., too high leverage) but can be adjusted  
 - **Hard Fail:** Breaches critical rule (e.g., margin call imminent) → discarded  
 <img width="1420" height="651" alt="image" src="https://github.com/user-attachments/assets/4ab44c8b-060d-439c-9c96-e6093f1862d4" />
-<img width="800" height="1000" alt="1 4 Risk analysis activity _ Mermaid Chart-2025-10-03-054441" src="https://github.com/user-attachments/assets/6c74d7d2-800d-400c-a863-114b7c459f31" />
+<img width="700" height="800" alt="1 4 Risk analysis activity _ Mermaid Chart-2025-10-03-054441" src="https://github.com/user-attachments/assets/6c74d7d2-800d-400c-a863-114b7c459f31" />
 
 ---
 
@@ -225,6 +225,7 @@ Ensures Trader execution is safe:
 ### Part (3) Inventory Pruning
 - Rank methods by frequency of use.  
 - Remove less-used methods over time (careful to preserve scenario-specific methods).  
+<img width="700" height="800" alt="1 6 Knowledge transfer   pruning _ Mermaid Chart-2025-10-03-054658" src="https://github.com/user-attachments/assets/b860b4f3-4cb3-4792-b8e4-e961d59abf81" />
 
 ### Part (n) Future Extensions
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
