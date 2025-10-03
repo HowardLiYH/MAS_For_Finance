@@ -186,6 +186,7 @@ Consumes Analyst outputs (features + trends) and produces:
 - Leverage Size  
 - Liquidation Price  
 <img width="1117" height="356" alt="image" src="https://github.com/user-attachments/assets/da748f5e-b978-455a-b594-ff9c029b1033" />
+<img width="500" height="800" alt="1 5 Trader order state machine _ Mermaid Chart-2025-10-03-054208" src="https://github.com/user-attachments/assets/7cc08d4c-ad3c-4372-ae61-67e5ae458669" />
 
 ---
 
