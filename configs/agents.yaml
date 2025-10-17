@@ -1,0 +1,19 @@
+# configs/agents.yaml
+symbol: BTCUSD.PERP         # default symbol (CLI can override)
+timeframe: 4h               # default interval (CLI can override)
+
+data:
+  exchange_id: kraken       # change here once, flows through to pipeline
+  max_days: 30
+  out_dir: data
+  offline_prices_csv: null
+  offline_news_jsonl: null
+
+news:
+  use_llm_news: true
+  news_query: "bitcoin OR BTC"
+  search_provider: serpapi
+  llm_model: gpt-4o-mini
+  max_news_per_stream: 10
+  max_search_results_per_stream: 100
+  require_published_signal: true

@@ -19,7 +19,6 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
-import news.llm_prompt_search as llmps
 
 try:
     import ccxt
@@ -195,6 +194,7 @@ def run_pipeline(
     print("⚙️ Forming News Data 📰.............")
 
     if use_llm_news:
+        from news import llm_prompt_search as llmps
         openai_key_present = bool(os.getenv("OPENAI_API_KEY"))
         if openai_key_present:
             # NEW (module import avoids Pylance/Pylint symbol resolution issues)
