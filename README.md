@@ -4,13 +4,15 @@
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
-python scripts/run_pipeline.py --config configs/btc4h.yaml
+python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
 ```
-
+## ✨ Related Repositories
+   - [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN)
+   - [TradingAgents](https://github.com/TauricResearch/TradingAgents)
 
 ## 📅 Meeting Notes
 - Sep 18：
-   -  Draw a UML diagram first
+   -  Draw a UML diagram and decide on base classes
       - Tools
             - Is there a Base class
             - What are the additional features for each?
@@ -21,35 +23,16 @@ python scripts/run_pipeline.py --config configs/btc4h.yaml
             - Core Properties
    -  Create a raw functionable complete workflow
        - Full run of five agents
-       - Related Repositories
-            - [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN)
-           - [TradingAgents](https://github.com/TauricResearch/TradingAgents)
+       - 
 
 
 
-## 📔 Development Log for Phase 1
+## 📔 Development Log 
 - Done ✅：
   - Get Price 📈 and News 📰
-      - Retrieve BTC Price Data from the crypto exchange of choice on 4h intervals for 120 days (Parameters are subjectable to changes)
-        - `data/btc_4h.csv`
-      - Retrieve both micro and macro news data by combining prompt engineering with OpenAI’s LLM and the SerpAPI search engine.
-        - `data/news_micro.json` (Size: 10)
-        - `data/news_macro.json` (Size: 10)
+  - Full workflow without evaluation
           
-NOTE: The parameters for getting Price data and prompts for News data are all at a very basic functional level and need to be finetuned/optimized later.       
-       
 
-- To Do ❕
-  - Analyst Agent
-      - Evaluate on Price Data
-  - Researcher Agent
-      - Evaluate on Price Data
-  - Trader
-      - Evaluate on both the Price Data AND News Data
-  - Risk Manager
-      - Evaluate on Trader's performance
-  - Evaluator
-      - TBD Maybe push to Phase 2
 
 
 ----
@@ -231,3 +214,4 @@ Ensures Trader execution is safe:
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
 
 ---
+
