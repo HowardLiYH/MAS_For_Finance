@@ -12,6 +12,46 @@ from core.schemas import NewsItem
 from .providers.search_serpapi import search_news_serpapi
 import re
 
+DEFAULT_MICRO = [
+    '(bitcoin OR BTC) ("ETF" OR "exchange-traded fund")',
+    '(bitcoin OR BTC) (liquidations OR "short squeeze" OR funding OR perps)',
+    '(bitcoin OR BTC) (binance OR coinbase OR kraken OR "major exchange")',
+    '(bitcoin OR BTC) (miners OR hashrate OR difficulty OR halving)',
+    '(bitcoin OR BTC) (order book OR flows OR "open interest")',
+    '(bitcoin OR BTC) (perpetual futures OR "BTCUSD perpetual")',
+]
+
+DEFAULT_MACRO = [
+    '(bitcoin OR BTC) (Federal Reserve OR FOMC OR "interest rates")',
+    '(bitcoin OR BTC) (CPI OR inflation OR "PCE")',
+    '(bitcoin OR BTC) (SEC OR ETF approvals OR regulation)',
+    '(bitcoin OR BTC) (Treasury OR yields OR "UST" OR "liquidity")',
+    '(bitcoin OR BTC) (geopolitics OR sanctions OR BRICS OR "USD liquidity")',
+    '(bitcoin OR BTC) (macro data OR jobs OR unemployment OR GDP)',
+]
+
+def _massage_queries(items: list[str], *, stream: str) -> list[str]:
+    """Coerce LLM outputs into workable Google-News queries."""
+    out = []
+    for s in items or []:
+        s0 = s.strip()
+        # drop explicit date phrases the LLM sometimes adds
+        s0 = re.sub(r"\bfrom\s+\d{4}-\d{2}-\d{2}\s+to\s+\d{4}-\d{2}-\d{2}\b", "", s0, flags=re.I)
+        # ensure the bitcoin anchor is present
+        if "bitcoin" not in s0.lower() and "btc" not in s0.lower():
+            s0 = f"(bitcoin OR BTC) {s0}".strip()
+        # if still looks like a sentence (no boolean cues), fall back to themed defaults
+        if not re.search(r'\b(AND|OR|site:)\b', s0, flags=re.I):
+            out.append(s0)  # keep it; provider will still try it
+        else:
+            out.append(s0)
+    # Guarantee a healthy base set
+    base = DEFAULT_MICRO if stream == "micro" else DEFAULT_MACRO
+    if len(out) < 4:  # too few or too weak — backfill with strong defaults
+        out = (out + base)[:8]
+    return out
+
+
 class QueryPlan(BaseModel):
     """
     BaseModel from pydantic is used here simply for checking element
@@ -41,16 +81,22 @@ def _client() -> OpenAI:
 
 def _llm_plan(topic: str, from_dt: dt.datetime, to_dt: dt.datetime, model: str) -> QueryPlan:
     prompt = f"""
-    Plan news web-search queries to find BTC-related news STRICTLY within:
+    Plan *boolean web-search queries* to find BTC-related news STRICTLY within:
     FROM: {from_dt.isoformat()}
     TO:   {to_dt.isoformat()}
 
-    Return JSON ONLY: {{"micro":[...], "macro":[...]}}
-    - micro: BTC price/action, ETF flows, miners, exchanges, liquidations, funding, perps.
-    - macro: Fed, CPI/inflation, SEC actions, Treasury, yields, geopolitics, USD liquidity.
-    Rules: 6–10 queries per stream; specific & time-aware; no commentary.
+    Return JSON ONLY: {{"micro":[...], "macro":[...]}} where each item is a *search query string*:
+    - Every query MUST contain: (bitcoin OR BTC)
+    - No dates in the query text (the caller handles the time window)
+    - Use boolean/keyword style, not sentences; no commentary
+    - 6–10 queries per stream
+
+    micro should cover: price/action, ETF flows, miners, exchanges, liquidations, funding, perps.
+    macro should cover: Fed, CPI/inflation, SEC actions, Treasury, yields, geopolitics, USD liquidity.
+
     TOPIC: "{topic}"
     """
+
     print(f"Feeding the prompt:\n")
     print("-----------------------------------------------------------------")
     print(f"{prompt}")
@@ -81,27 +127,37 @@ def _to_items(rows: List[Dict[str, Any]], symbol_hint: str) -> List[NewsItem]:
 def search_micro_macro(*, topic: str, from_dt: dt.datetime, to_dt: dt.datetime,
                                       max_per_stream: int, provider: str="serpapi",
                                       llm_model: str="gpt-4o-mini", symbol_hint: str="BTC") -> Dict[str, List[NewsItem]]:
+
+
     plan = _llm_plan(topic, from_dt, to_dt, llm_model)
 
-    def run(queries: List[str]) -> List[Dict[str, Any]]:
-        """
-        Here the function is tuned to Serpapi sepcifcially.
-        Can later change to Google Customized Search API (Free Tier: 100/day)
-        """
+    def run(queries: List[str], stream: str) -> List[Dict[str, Any]]:
         seen, acc = set(), []
-        for q in queries:
-            # Search with Serpapi
-            rows = search_news_serpapi(q, from_dt, to_dt, limit=50) if provider=="serpapi" else []
+        qs = _massage_queries(queries, stream=stream)
+        for q in qs:
+            rows = search_news_serpapi(q, from_dt, to_dt, limit=50) if provider == "serpapi" else []
             for r in rows:
-                # include urls
                 u = r.get("url")
                 if u and u not in seen:
                     seen.add(u); acc.append(r)
-            if len(acc) >= max_per_stream*2: break
+            if len(acc) >= max_per_stream * 2:
+                break
+        # If still sparse, append strong defaults not already tried
+        if len(acc) < max_per_stream:
+            defaults = DEFAULT_MICRO if stream == "micro" else DEFAULT_MACRO
+            extra = [x for x in defaults if x not in qs]
+            for q in extra:
+                rows = search_news_serpapi(q, from_dt, to_dt, limit=50) if provider == "serpapi" else []
+                for r in rows:
+                    u = r.get("url")
+                    if u and u not in seen:
+                        seen.add(u); acc.append(r)
+                if len(acc) >= max_per_stream * 2:
+                    break
         return acc
 
-    micro_rows = run(plan.micro)
-    macro_rows = run(plan.macro)
+    micro_rows = run(plan.micro, "micro")
+    macro_rows = run(plan.macro, "macro")
     micro = _to_items(micro_rows, symbol_hint)[:max_per_stream]
     macro = _to_items(macro_rows, symbol_hint)[:max_per_stream]
     return {"micro": micro, "macro": macro}

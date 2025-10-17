@@ -1,20 +1,29 @@
-# Python / venv / cache
+# Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+*.pyd
 *.egg-info/
 .venv/
-
-# Secrets
 .env
-*.env
 
-# OS/editor
+# OS / editor
 .DS_Store
+*.swp
 .idea/
 .vscode/
 
-# Project artifacts (don’t version generated data)
-data/*.csv
-data/*.json
-data/*.jsonl
-!data/.gitkeep
+# Data / outputs
+data/
+*.csv
+*.json
+!configs/*.json       # if you really want to keep specific config jsons
+__MACOSX/
+
+# Jupyter cache
+.ipynb_checkpoints/
+__pycache__/
+.venv/
+.env
+data/
+.DS_Store
