@@ -10,15 +10,13 @@ python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
    - [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN)
    - [TradingAgents](https://github.com/TauricResearch/TradingAgents)
 
-## 💪 To-do
-- Implement on base classes
-
-
 
 ## 📔 Development Log 
 - Done ✅：
   - Get Price 📈 and News 📰
   - Full workflow without evaluation
+- In Progress 🔄:
+   - Implement on base classes 
           
 
 
@@ -202,5 +200,6 @@ Ensures Trader execution is safe:
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
 
 ---
+
 
 
