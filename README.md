@@ -4,7 +4,7 @@
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
-python scripts/run_pipeline.py --config configs/btc4h.yaml
+python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
 ```
 
 

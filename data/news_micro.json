@@ -3,7 +3,7 @@
     "source": "web",
     "title": "Watch These Bitcoin Price Levels as Cryptocurrency Rebounds From Sell-Off",
     "url": "https://www.investopedia.com/watch-these-bitcoin-price-levels-as-cryptocurrency-rebounds-from-sell-off-11828809",
-    "published_at": "2025-10-14T04:33:30.839745Z",
+    "published_at": "2025-10-13T23:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
@@ -13,7 +13,7 @@
     "source": "web",
     "title": "Bitcoin's Price Dips Back Down From Its Record High. Should Investors Buy the Coin Ahead of 2026?",
     "url": "https://finance.yahoo.com/news/bitcoins-price-dips-back-down-090000449.html",
-    "published_at": "2025-10-15T04:33:30.839745Z",
+    "published_at": "2025-10-14T23:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
@@ -21,29 +21,19 @@
   },
   {
     "source": "web",
-    "title": "Bitcoin Price Nears All-Time High As It Soars Above $122,000",
-    "url": "https://bitcoinmagazine.com/markets/bitcoin-price-soars-to-122000-standard-chartered-projects-200000-btc-by-year-end",
-    "published_at": "2025-10-03T04:33:30.839745Z",
+    "title": "Bitcoin Price Slides To $104,000 As Market Fear Hits \u2018Extreme\u2019 Levels",
+    "url": "https://bitcoinmagazine.com/markets/bitcoin-price-slides-to-104000",
+    "published_at": "2025-10-17T14:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
-    "summary": "Bitcoin Price Soars to $122,000, Standard Chartered Projects $200,000 BTC by Year-End. Bitcoin surged past $122,000 today, climbing over 12% in a week, and..."
-  },
-  {
-    "source": "web",
-    "title": "Bitcoin Price Falls. Why a Rising Dollar Is a Threat to the Crypto.",
-    "url": "https://www.barrons.com/articles/bitcoin-ethereum-xryp-price-crypto-caeebc96?gaa_at=eafs&gaa_n=AWEtsqdSXKUpWP317SBEAippfXXTm3UeKLdmt4L32g9AaO1mkBadm0CwGyzV&gaa_ts=68f1bada&gaa_sig=PacoW6kulM8vM3VfEvKWd_PXT8_HKSedMv6vr8w8WxQy_1fD40zpkiEdMR7_Gvy6c0HPnPT_y-QhzYhFYGQaBg%3D%3D",
-    "published_at": "2025-10-10T04:33:30.839745Z",
-    "tickers": [
-      "BTC-USD-USD"
-    ],
-    "summary": "Bitcoin price, Ethereum, XRP and other cryptos are hitting a selloff just days after reaching fresh highs."
+    "summary": "Bitcoin price has fallen to the $104000 range today \u2014 and the downturn isn't letting up."
   },
   {
     "source": "web",
     "title": "Bitcoin's Price Dips Back Down From Its Record High. Should Investors Buy the Coin Ahead of 2026?",
     "url": "https://www.fool.com/investing/2025/10/14/bitcoins-price-dips-back-down-from-its-record-high/",
-    "published_at": "2025-10-15T04:33:30.839745Z",
+    "published_at": "2025-10-14T23:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
@@ -51,39 +41,49 @@
   },
   {
     "source": "web",
-    "title": "Bitcoin price faces fresh stress as miner deposits to Binance top $5bn",
-    "url": "https://www.dlnews.com/articles/markets/bitcoin-price-stress-as-miners-deposit-5bn-on-binance/",
-    "published_at": "2025-10-16T18:33:30.839745Z",
+    "title": "Bitcoin 'bull run is over,' traders say, with 50% BTC price crash warning",
+    "url": "https://cointelegraph.com/news/bitcoin-bull-run-over-traders-50-percent-btc-price-crash-warning",
+    "published_at": "2025-10-17T13:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
-    "summary": "Bitcoin miners are making large deposits to crypto exchanges in the wake of this week's $19 billion market rout. Data from CryptoQuant shows about 51,000..."
+    "summary": "Bears pull Bitcoin price below the 200-day SMA, but is it the start of the bear market?"
+  },
+  {
+    "source": "web",
+    "title": "Bitcoin, Ethereum Prices Tumble. Cryptos Plunge Toward 3-Month Lows.",
+    "url": "https://www.barrons.com/articles/bitcoin-ethereum-prices-cryptos-831c04b1?gaa_at=eafs&gaa_n=AWEtsqfJiVuNGwR7nB42LnzQBGHsZH9ckaXMQ2BCFcNLJZsqn8NWyZAmp6MI&gaa_ts=68f2d71a&gaa_sig=YLRW4QZEt9k6bRZXgVNjkhUCdHO6AAODImqkwrfjuXHHP_TC4mKntD8GnLj_IXN9TG0saCrMpRWX-WTTjQJmGw%3D%3D",
+    "published_at": "2025-10-17T12:39:02.699226Z",
+    "tickers": [
+      "BTC-USD-USD"
+    ],
+    "summary": "Bitcoin price fell to its lowest level since June as investors fled risk assets. Ethereum, XRP and other cryptos tumbled, too."
+  },
+  {
+    "source": "web",
+    "title": "Bitcoin price today: plunges to $106k amid trade tensions, credit risks",
+    "url": "https://www.investing.com/news/cryptocurrency-news/bitcoin-price-today-slips-to-108k-amid-trade-tensions-credit-risks-4293742",
+    "published_at": "2025-10-17T13:39:02.699226Z",
+    "tickers": [
+      "BTC-USD-USD"
+    ],
+    "summary": "Investing.com-- Bitcoin dipped on Friday and was set for a second straight week of losses as risk appetite for cryptocurrencies was battered by concerns..."
   },
   {
     "source": "web",
     "title": "Bitcoin Price Levels to Watch After Cryptocurrency Hits Record High Above $125,000",
     "url": "https://www.investopedia.com/bitcoin-price-levels-to-watch-after-cryptocurrency-hits-record-high-above-usd125000-11824639",
-    "published_at": "2025-10-10T04:33:30.839745Z",
+    "published_at": "2025-10-10T23:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
-    "summary": "Bitcoin hit another record high Monday after surpassing the closely watched $125000 level over the weekend for the first time ever."
+    "summary": "Bitcoin's price has soared 34% since the start of the year, outpacing major stock indexes, but trailing safe-haven gold's 50% return over the same period. The..."
   },
   {
     "source": "web",
-    "title": "Bitcoin Price Outlook After All-Time High: Larger Rally Or Corrections?",
-    "url": "https://finance.yahoo.com/news/bitcoin-price-outlook-time-high-181357953.html",
-    "published_at": "2025-10-10T04:33:30.839745Z",
-    "tickers": [
-      "BTC-USD-USD"
-    ],
-    "summary": "Bitcoin (BTC) has surged beyond $125,000, setting a new all-time high and cementing its dominance as the world's leading cryptocurrency."
-  },
-  {
-    "source": "web",
-    "title": "Bitcoin Price Struggles Below $110,000 as Gold Soars to New Heights",
+    "title": "Bitcoin Price Falls Below $110,000 As Gold Surges To Highs",
     "url": "https://bitcoinmagazine.com/markets/bitcoin-price-struggles-below-110000",
-    "published_at": "2025-10-16T15:33:30.839745Z",
+    "published_at": "2025-10-16T23:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
@@ -91,12 +91,12 @@
   },
   {
     "source": "web",
-    "title": "Bitcoin, Ethereum, XRP Fall. Why Cryptos Are Struggling Today.",
-    "url": "https://www.barrons.com/articles/bitcoin-ethereum-xrp-crypto-today-418564da?gaa_at=eafs&gaa_n=AWEtsqe91q5QBSHuo9p4KNq1bzSe5vfxO_4GB6MQJQlOeQsg0gq4B7-LNGaf&gaa_ts=68f1bada&gaa_sig=jYtuY7I71K3MgFxMzv8eXuTjSyF5Sa5WoZiXznv3frBsf12kzwWzfchAkrmpQ6UOaguvlLGV10w8C0rn-gstmw%3D%3D",
-    "published_at": "2025-10-10T04:33:30.839745Z",
+    "title": "Bitcoin Price Outlook After All-Time High: Larger Rally Or Corrections?",
+    "url": "https://finance.yahoo.com/news/bitcoin-price-outlook-time-high-181357953.html",
+    "published_at": "2025-10-03T23:39:02.699226Z",
     "tickers": [
       "BTC-USD-USD"
     ],
-    "summary": "Bitcoin price, Ethereum, and XRP fell early Thursday. The world's largest cryptocurrency is now up just about 1% over the past seven days."
+    "summary": "Bitcoin (BTC) has surged beyond $125,000, setting a new all-time high and cementing its dominance as the world's leading cryptocurrency."
   }
 ]

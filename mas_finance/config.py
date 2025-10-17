@@ -1,6 +1,6 @@
 # mas_finance/config.py
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 import os, yaml
 
@@ -27,9 +27,10 @@ class NewsCfg:
 class AppCfg:
     # top-level app knobs
     symbol: str = "BTCUSD.PERP"
-    timeframe: str = "4h"  # CLI still allowed to override
-    data: DataCfg = DataCfg()
-    news: NewsCfg = NewsCfg()
+    timeframe: str = "4h"  # CLI can override
+    data: DataCfg = field(default_factory=DataCfg)  # ✅ default_factory
+    news: NewsCfg = field(default_factory=NewsCfg)  # ✅ default_factory
+
 
 def _deep_update(obj: dict, upd: dict) -> dict:
     for k, v in upd.items():

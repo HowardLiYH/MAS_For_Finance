@@ -1,32 +1,52 @@
-
 from __future__ import annotations
-from typing import Tuple
+from typing import Dict, List, Any, Tuple, Union
 import pandas as pd
+
 from .base import BaseAgent
-from ..inventories.registry import get
-from ..inventories import analyst_feature as _af  # register classes
-from ..inventories import analyst_trend as _at    # register classes
+from ..inventories.registry import get as registry_get
+
+MethodEntry = Union[Any, tuple]
 
 class AnalystAgent(BaseAgent):
     """Implements MAS A-A/A-B/A-C steps. Outputs FeatureDF and TrendDF."""
+
+    def __init__(self, id: str = "A1", inventory: Dict[str, List[MethodEntry]] | None = None):
+        super().__init__(id=id)
+        self.inventory = inventory or self._default_inventory()
+
+    def _default_inventory(self) -> Dict[str, List[MethodEntry]]:
+        return {
+            "analyst.feature": [
+                registry_get("analyst.feature","talib_stack")(),
+                registry_get("analyst.feature","stl")(),
+            ],
+            "analyst.trend": [
+                registry_get("analyst.trend","gaussian_hmm")(),
+                registry_get("analyst.trend","kalman_filter")(),
+            ],
+        }
+
+    def _run_entry(self, entry: MethodEntry, *args, **kwargs):
+        if isinstance(entry, tuple) and len(entry) == 2:
+            inst, run_kwargs = entry
+            return inst.run(*args, **{**run_kwargs, **kwargs})
+        return entry.run(*args, **kwargs)
+
     def run(self, price_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        # Step A-A: Data Alignment
         self.log("📊 A-A Data Alignment → sorting index & ensuring UTC")
         price_df = price_df.copy().sort_index()
-        # Step A-B: feature construction using two methods
-        self.log("📊 A-B Feature Construction → running [talib_stack, stl]")
-        feat1 = get("analyst.feature","talib_stack")().run(price_df)
-        feat2 = get("analyst.feature","stl")().run(price_df)
-        feature_df = pd.concat([feat1, feat2], axis=1)
-        self.log(f"FeatureDF columns: {list(feature_df.columns)} (shape={feature_df.shape})")
-        # Step A-C: trend detection
-        self.log("📊 A-C Trend Detection → running [gaussian_hmm, kalman_filter] and merging")
-        tr1 = get("analyst.trend","gaussian_hmm")().run(price_df)
-        tr2 = get("analyst.trend","kalman_filter")().run(price_df)
-        trend_df = tr1.copy()
-        trend_df["prob_up"] = 0.5*(tr1["prob_up"] + tr2["prob_up"])
-        trend_df["prob_down"] = 1 - trend_df["prob_up"]
-        trend_df["regime"] = ((tr1["regime"] + tr2["regime"])>0).astype(int)
-        trend_df["slope"] = 0.5*(tr1["slope"] + tr2["slope"])
-        self.log(f"TrendDF columns: {list(trend_df.columns)} (shape={trend_df.shape})")
+
+        self.log("📊 A-B Feature Construction → running configured feature methods")
+        feat_parts = [self._run_entry(m, price_df=price_df) for m in self.inventory.get("analyst.feature", [])]
+        feature_df = pd.concat(feat_parts, axis=1) if feat_parts else pd.DataFrame(index=price_df.index)
+
+        self.log("📊 A-C Trend Detection → running configured trend methods")
+        trend_parts = [self._run_entry(m, price_df=price_df) for m in self.inventory.get("analyst.trend", [])]
+        trend_df = trend_parts[0] if trend_parts else pd.DataFrame(index=price_df.index)
+        if len(trend_parts) > 1 and "prob_up" in trend_parts[0].columns:
+            # simple average; feel free to replace by a named combine policy in config
+            trend_df = trend_parts[0].copy()
+            trend_df["prob_up"] = sum(tp["prob_up"] for tp in trend_parts) / len(trend_parts)
+            trend_df["prob_down"] = 1 - trend_df["prob_up"]
+
         return feature_df, trend_df

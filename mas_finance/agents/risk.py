@@ -1,31 +1,54 @@
-
 from __future__ import annotations
-from typing import Tuple, Dict, Any, List
+from typing import Dict, List, Any, Union
 import pandas as pd
+
 from .base import BaseAgent
-from ..dto.types import ExecutionSummary, RiskReview
-from ..inventories.registry import get
-from ..inventories import risk_checks as _rc
+from ..dto.types import RiskReview, ExecutionSummary
+from ..inventories.registry import get as registry_get
+
+MethodEntry = Union[Any, tuple]
 
 class RiskManagerAgent(BaseAgent):
-    """Implements MAS M-A/B. Aggregates checks and returns pass/soft_fail/hard_fail."""
-    def run(self, exec_sum: ExecutionSummary, price_df: pd.DataFrame, *, regen_attempted: bool=False) -> RiskReview:
-        context = {"price_df": price_df, "var_limit": 0.02, "max_leverage": 5.0, "max_position": 1.0}
-        # Run VaR band then leverage/size checks
-        self.log("🛡️ M-A Risk Analysis → [var_safe_band, leverage_position_limits]")
-        checks = [
-            get("risk.checks","var_safe_band")(),
-            get("risk.checks","leverage_position_limits")()
-        ]
-        envelopes = {}; reasons: List[str] = []
-        verdict = "pass"
-        for chk in checks:
-            out = chk.evaluate(exec_sum.__dict__, context)
-            reasons += out.get("reasons", [])
-            if out["verdict"] == "hard_fail":
-                verdict = "hard_fail"; break
-            if out["verdict"] == "soft_fail":
-                verdict = "soft_fail"; envelopes.update(out.get("envelope", {}))
-        review = RiskReview(verdict=verdict, reasons=reasons, envelope=envelopes, approved=(verdict=="pass"))
-        self.log(f"Risk verdict: {review.verdict} | envelope={review.envelope}")
-        return review
+    def __init__(self, id: str = "M1", inventory: Dict[str, List[MethodEntry]] | None = None):
+        super().__init__(id=id)
+        self.inventory = inventory or self._default_inventory()
+
+    def _default_inventory(self) -> Dict[str, List[MethodEntry]]:
+        return {
+            "risk.checks": [
+                registry_get("risk.checks","var_safe_band")(),
+                registry_get("risk.checks","leverage_position_limits")(),
+            ]
+        }
+
+    def _run_check(self, entry: MethodEntry, exec_sum: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(entry, tuple) and len(entry) == 2:
+            inst, run_kwargs = entry
+            return inst.evaluate(exec_sum, {**context, **run_kwargs})
+        return entry.evaluate(exec_sum, context)
+
+    def run(self, execution: ExecutionSummary, price_df: pd.DataFrame, regen_attempted: bool = False, **kwargs) -> RiskReview:
+        self.log("🛡️ Risk: applying checks")
+        exec_sum = {
+            "direction": execution.direction,
+            "position_size": execution.position_size,
+            "leverage": execution.leverage,
+            "entry_price": execution.entry_price,
+            "take_profit": execution.take_profit,
+            "stop_loss": execution.stop_loss,
+        }
+        context = {"price_df": price_df}
+
+        decision = {"verdict": "pass", "reasons": [], "envelope": {}}
+        for m in self.inventory.get("risk.checks", []):
+            result = self._run_check(m, exec_sum, context)
+            if result.get("verdict") in ("soft_fail", "hard_fail"):
+                decision = result
+                break
+
+        return RiskReview(
+            verdict=decision["verdict"],
+            reasons=decision.get("reasons", []),
+            envelope=decision.get("envelope", {}),
+            approved=decision.get("verdict") == "pass",
+        )
