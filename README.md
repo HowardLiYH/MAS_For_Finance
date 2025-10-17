@@ -10,20 +10,8 @@ python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
    - [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN)
    - [TradingAgents](https://github.com/TauricResearch/TradingAgents)
 
-## 📅 Meeting Notes
-- Sep 18：
-   -  Draw a UML diagram and decide on base classes
-      - Tools
-            - Is there a Base class
-            - What are the additional features for each?
-      - Pools
-            - How is it related to each agent
-            - What kind of tools does it include
-      - Agents
-            - Core Properties
-   -  Create a raw functionable complete workflow
-       - Full run of five agents
-       - 
+## 💪 To-do
+- Implement on base classes
 
 
 
@@ -214,4 +202,5 @@ Ensures Trader execution is safe:
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
 
 ---
+
 
