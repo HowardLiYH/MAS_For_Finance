@@ -1,9 +1,9 @@
-# configs/agents.yaml
-symbol: BTCUSD.PERP         # default symbol (CLI can override)
-timeframe: 4h               # default interval (CLI can override)
+# existing keys...
+symbol: BTCUSD.PERP
+timeframe: 4h
 
 data:
-  exchange_id: kraken       # change here once, flows through to pipeline
+  exchange_id: kraken
   max_days: 30
   out_dir: data
   offline_prices_csv: null
@@ -17,3 +17,38 @@ news:
   max_news_per_stream: 10
   max_search_results_per_stream: 100
   require_published_signal: true
+
+# NEW: agent → list of inventories (flat list of "pool:name")
+agents:
+  analyst:
+    id: "A1"
+    inventories:
+      - "analyst.feature:talib_stack"
+      - "analyst.feature:stl"
+      - "analyst.trend:gaussian_hmm"
+      - "analyst.trend:kalman_filter"
+
+  researcher:
+    id: "R1"
+    inventories:
+      - "researcher.forecast:arima_x"
+      - "researcher.forecast:tft"
+      - "researcher.uncertainty:bootstrap_ensemble"
+      - "researcher.uncertainty:quantile_regression"
+      - "researcher.calibration:temperature_scaling"
+      - "researcher.calibration:conformal_icp"
+
+  trader:
+    id: "T1"
+    inventories:
+      - "trader.exec_style:aggressive_market"
+      - "trader.exec_style:passive_laddered_limit"
+
+  risk:
+    id: "M1"
+    inventories:
+      - "risk.checks:var_safe_band"
+      - "risk.checks:leverage_position_limits"
+
+  evaluator:
+    id: "E1"

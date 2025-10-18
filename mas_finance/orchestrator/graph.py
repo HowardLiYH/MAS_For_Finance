@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, Tuple, List
@@ -31,6 +30,42 @@ except Exception:
 # --- import your Phase-1.1 pipeline directly
 from core.data_pipeline import run_pipeline
 
+# NEW: config-driven agent builder (add these files as previously shared)
+from ..agents.compose import (
+    load_inventory_plugins,
+    build_agents_from_yaml,
+)
+
+# Default location for the config that declares agent → inventories
+DEFAULT_AGENTS_CFG = ROOT / "configs" / "agents.yaml"
+
+
+def _normalize_symbol(s: str) -> str:
+    u = s.upper().replace("USDT", "USD")
+    return "BTC/USD" if ("BTC" in u and "USD" in u) else s
+
+
+def _load_agents_or_fallback() -> Dict[str, Any]:
+    """
+    Try to build agents (and their inventories) from configs/agents.yaml.
+    If the file is missing or invalid, return {} and the caller will use hard-coded defaults.
+    """
+    try:
+        load_inventory_plugins()  # auto-discover inventory modules so @register runs
+        if DEFAULT_AGENTS_CFG.exists():
+            agents = build_agents_from_yaml(DEFAULT_AGENTS_CFG)
+            if agents:
+                print(f"[ORCH] Using config-driven agents from {DEFAULT_AGENTS_CFG}")
+                return agents
+            else:
+                print(f"[ORCH] No 'agents:' section in {DEFAULT_AGENTS_CFG} — using defaults.")
+        else:
+            print(f"[ORCH] {DEFAULT_AGENTS_CFG} not found — using defaults.")
+    except Exception as e:
+        print(f"[ORCH] Failed to instantiate agents from config: {e!r} — using defaults.")
+    return {}
+
+
 def iterate_once(cfg: OrchestratorInput) -> Dict[str, Any]:
     """
     Orchestrator entrypoint.
@@ -61,10 +96,6 @@ def iterate_once(cfg: OrchestratorInput) -> Dict[str, Any]:
     print(f"[SETUP] symbol={cfg.symbol} window=[{start.isoformat()} → {end.isoformat()}], interval={cfg.interval}")
 
     # ================= Fetch BTC Price & News via src pipeline =================
-    def _normalize_symbol(s: str) -> str:
-        u = s.upper().replace("USDT", "USD")
-        return "BTC/USD" if ("BTC" in u and "USD" in u) else s
-
     provider = ncfg.search_provider
     if provider == "serpapi" and not os.getenv("SERPAPI_KEY"):
         print("⚠️ SERPAPI_KEY is missing — news will be sparse/empty.")
@@ -98,7 +129,7 @@ def iterate_once(cfg: OrchestratorInput) -> Dict[str, Any]:
     print(f"[DATA] Price bars: {len(price_df)} (head={price_df.index[0]}, tail={price_df.index[-1]})")
 
     # Load news JSONs produced by pipeline, then run your 3-stage filter
-    raw_news = []
+    raw_news: List[dict] = []
     for key in ("news_micro_json", "news_macro_json"):
         fpath = out.get(key)
         if fpath and Path(fpath).exists():
@@ -110,11 +141,14 @@ def iterate_once(cfg: OrchestratorInput) -> Dict[str, Any]:
     print(f"[DATA] News items: {len(news_items)} (after filter)")
 
     # ================= Agents =================
-    analyst = AnalystAgent(id="A1")
-    researcher = ResearcherAgent(id="R1")
-    trader = TraderAgent(id="T1")
-    risk = RiskManagerAgent(id="M1")
-    evaluator = EvaluatorAgent(id="E1")
+    # Prefer config-driven agents (with pre-instantiated inventories); otherwise use defaults.
+    agents = _load_agents_or_fallback()
+
+    analyst    = agents.get("analyst")    if agents else AnalystAgent(id="A1")
+    researcher = agents.get("researcher") if agents else ResearcherAgent(id="R1")
+    trader     = agents.get("trader")     if agents else TraderAgent(id="T1")
+    risk       = agents.get("risk")       if agents else RiskManagerAgent(id="M1")
+    evaluator  = agents.get("evaluator")  if agents else EvaluatorAgent(id="E1")
 
     # A: Analyst
     features, trend = analyst.run(price_df)
@@ -126,12 +160,12 @@ def iterate_once(cfg: OrchestratorInput) -> Dict[str, Any]:
     # M: Risk with single regeneration
     review1 = risk.run(exec1, price_df)
     regen_attempted = False
-    if review1.verdict == "soft_fail" and not regen_attempted:
+    if getattr(review1, "verdict", None) == "soft_fail" and not regen_attempted:
         print("[ORCH] Soft-fail envelope received → adjusting order & regenerating once")
         es = exec1.__dict__.copy()
-        if "max_size" in review1.envelope:
+        if "max_size" in getattr(review1, "envelope", {}):
             es["position_size"] = min(es["position_size"], review1.envelope["max_size"])
-        if "max_leverage" in review1.envelope:
+        if "max_leverage" in getattr(review1, "envelope", {}):
             es["leverage"] = min(es["leverage"], review1.envelope["max_leverage"])
         exec2 = exec1
         exec2.position_size = es["position_size"]; exec2.leverage = es["leverage"]
@@ -141,7 +175,7 @@ def iterate_once(cfg: OrchestratorInput) -> Dict[str, Any]:
     else:
         final_exec, final_review = exec1, review1
 
-    # E: Evaluator (placeholder)
+    # E: Evaluator (placeholder uses .score in your code)
     scores = evaluator.score({"exec": final_exec.__dict__, "risk": final_review.__dict__}, benchmarks=None)
 
     print("================= MAS ITERATION END =================\n")
