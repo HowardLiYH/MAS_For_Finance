@@ -7,8 +7,8 @@ pip install -e .
 python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
 ```
 ## ✨ Related Repositories
-   - [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN)
-   - [TradingAgents](https://github.com/TauricResearch/TradingAgents)
+   - TradingAgents Enhanced Chinese Edition: [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN)
+   - TradingAgents Original by Tauric Research: [TradingAgents](https://github.com/TauricResearch/TradingAgents)
 
 
 ## 📔 Change History 
@@ -226,6 +226,7 @@ Ensures Trader execution is safe:
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
 
 ---
+
 
 
 
