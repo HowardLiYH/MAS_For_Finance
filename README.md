@@ -11,12 +11,38 @@ python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
    - [TradingAgents](https://github.com/TauricResearch/TradingAgents)
 
 
-## 📔 Development Log 
-- Done ✅：
-  - Get Price 📈 and News 📰
-  - Full workflow without evaluation
-- In Progress 🔄:
-   - Implement on base classes 
+## 📔 Change History 
+- (2025.07.03) First Meeting
+- (2025.08.28) Project Proposal and Workflow First Draft
+- (2025.09.18) Completed Micro & Macro News and Price Data Fetch
+- (2025.10.17) Created config-driven, raw multi-agent pipeline, and raw inventory instantiation
+- Next：
+   - First-stage workflow: Complete the granular detail of analyst, researcher, and trader (risk and evaluator will be left for future work)
+      - **Price Data**
+        - At least 2 years with 4 hrs interval
+         - Fixed Underlying (for now): BTC
+         - Current time is the last row of the Data Frame
+      - **News Data**
+        - Elaborate on Prompt: Predetermined prompt to let the Trader find the relevant news information through LLM
+         - The search period should be determined by the Trader, but the max search period can not exceed the current time
+         - Only be used by the Trader in decision-making
+       - **Analyst and Researcher**
+          - Analyst takes in Price Data only; Researcher takes in selected features from Analyst in the form of a Data Frame
+         - Trained model will be fixed for now (Future model update will be initiated every time after k rows of data are passed)
+         - The researcher will output trading suggestions to the trader in the form of JSON
+      - **Trader**
+         - Take in Micro&Macro News, Price Data, and JSON summary form Researcher 
+         - Choose the current trading time based on the bottom row of the fetched Price Data Frame (safe for 4h interval)
+         - Interact with LLM
+           1. Provide the Trader's execution style to set a underlying personality
+           2. Provide all of the Price Data, all of the Micro&Macro News, and the Researcher's Trading JSON suggestions
+           3. Ask to provide back a trading proposal on ***Position Size, Leverage, Position Direction, Take Profit price, Stop Loss Price, and Execution Expired Time*** (EET is Optional: Another security layer in addition to turnover from Price Change)
+         - Output a log for thought process (useful for debugging and future peers' reinforcement learning)
+         - Integrate with [**Back-Trader**](https://github.com/mementum/backtrader) for backtesting (More details incoming)
+            - PNL can be determined on the total account value
+            - Use August for Validation and September for Test
+         
+         
           
 
 
@@ -200,6 +226,7 @@ Ensures Trader execution is safe:
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
 
 ---
+
 
 
 
