@@ -41,7 +41,10 @@ python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
          - Integrate with [**Back-Trader**](https://github.com/mementum/backtrader) for backtesting (More details incoming)
             - PNL can be determined on the total account value
             - Use August for Validation and September for Test
-         
+
+   - Further in the future
+      - **Compare the market interpretability of different LLMs on Trader**
+         - Evidence shows DeepSeek performs the best and OpenAI performs the worst when assigned to discretionary trading tasks
          
           
 
@@ -226,6 +229,7 @@ Ensures Trader execution is safe:
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
 
 ---
+
 
 
 
