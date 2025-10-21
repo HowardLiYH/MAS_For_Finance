@@ -45,6 +45,7 @@ python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
    - Further in the future
       - **Compare the market interpretability of different LLMs on Trader**
          - Evidence shows DeepSeek performs the best and OpenAI performs the worst when assigned to discretionary trading tasks (Alpha Arena)
+         - Consider on including Kimi
       - **Use Alpha Arena as a benchmark and see if we can beat it**
          - Website: [Link](https://nof1.ai/)
          
@@ -231,6 +232,7 @@ Ensures Trader execution is safe:
 - Add Admin agent to generate reports, monitor performance, and deliver evaluations.  
 
 ---
+
 
 
 
