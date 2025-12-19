@@ -64,7 +64,7 @@ Instead of deterministic UCB, agents sample from Beta distributions to naturally
 
 ```
 For each method m:
-  sample ~ Beta(α_m, β_m)  
+  sample ~ Beta(α_m, β_m)
   # High uncertainty → high variance → more exploration
   # High success rate → high mean → more exploitation
 ```

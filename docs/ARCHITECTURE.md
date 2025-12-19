@@ -66,13 +66,13 @@ flowchart LR
         TOP["Select top-3"]
         BETA --> RANK --> TOP
     end
-    
+
     subgraph UPDATE["Bayesian Update"]
         WIN["Reward > 0?"]
         WIN -->|Yes| ALPHA["α_m += 1 + magnitude"]
         WIN -->|No| BETAU["β_m += 1 + magnitude"]
     end
-    
+
     TOP --> EXECUTE["Execute Pipeline"]
     EXECUTE --> WIN
 ```
@@ -90,13 +90,13 @@ flowchart TB
         VOL --> KEY
         REG --> KEY
     end
-    
+
     subgraph BASELINE["Per-Context Baseline"]
         KEY --> LOOKUP["baseline = context_baselines[key]"]
         LOOKUP --> ADV["advantage = reward - baseline"]
         ADV --> UPDT["Update baseline incrementally"]
     end
-    
+
     subgraph CREDIT["Proper Credit Assignment"]
         C1["Bull +2%<br/>baseline=2.5%<br/>advantage=-0.5"]
         C2["Bear +2%<br/>baseline=-0.5%<br/>advantage=+2.5 ✓"]
@@ -112,14 +112,14 @@ flowchart LR
         P2["t-1: methods, G=r₀+γr₁"]
         P3["t: methods, G=r₀"]
     end
-    
+
     subgraph DISCOUNT["Discount Accumulation"]
         R["New reward r_t"]
         R --> D1["P1.G += γ²·r_t"]
         R --> D2["P2.G += γ·r_t"]
         R --> D3["P3.G += r_t"]
     end
-    
+
     subgraph APPLY["Apply When Complete"]
         D1 --> DONE["steps_remaining == 0"]
         DONE --> FINAL["Update preferences<br/>with full return G"]
