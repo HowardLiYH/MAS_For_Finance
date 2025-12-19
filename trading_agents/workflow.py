@@ -1,0 +1,444 @@
+"""Workflow engine for orchestrating the multi-agent trading system."""
+from __future__ import annotations
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Dict, List, Any, Optional
+import json
+import sys
+import os
+
+import pandas as pd
+from dateutil import parser as dtparser
+
+# Setup paths and environment
+ROOT = Path(__file__).resolve().parent.parent
+DATA_PIPELINE = ROOT / "data_pipeline"
+if DATA_PIPELINE.exists() and str(DATA_PIPELINE) not in sys.path:
+    sys.path.insert(0, str(DATA_PIPELINE))
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env")
+except Exception:
+    pass
+
+# Local imports
+from .config import AppConfig, OrchestratorInput, load_config, build_agents
+from .config.loader import build_agents_from_yaml
+from .models import ResearchSummary, ExecutionSummary, RiskReview
+from .inventory import load_all_methods
+from .services.metrics import PerformanceTracker
+from .optimization import KnowledgeTransfer, InventoryPruner
+from .utils.news_filter import filter_news_3_stage
+
+# Agent imports
+from .agents.analyst import AnalystAgent
+from .agents.researcher import ResearcherAgent
+from .agents.trader import TraderAgent
+from .agents.risk import RiskAgent
+from .agents.evaluator import EvaluatorAgent
+
+# Data pipeline import
+try:
+    from pipeline.data_pipeline import run_pipeline
+except ImportError:
+    run_pipeline = None
+
+DEFAULT_CONFIG_PATH = ROOT / "configs" / "default.yaml"
+
+
+def _normalize_symbol(symbol: str) -> str:
+    """Normalize symbol format."""
+    upper = symbol.upper().replace("USDT", "USD")
+    return "BTC/USD" if ("BTC" in upper and "USD" in upper) else symbol
+
+
+def _get_inventory_methods(agent) -> Dict[str, List[str]]:
+    """Extract inventory method names from an agent."""
+    if not hasattr(agent, 'inventory'):
+        return {}
+
+    methods = {}
+    for pool, method_entries in agent.inventory.items():
+        method_names = []
+        for entry in method_entries:
+            if hasattr(entry, 'name'):
+                method_names.append(entry.name)
+            elif isinstance(entry, tuple) and len(entry) > 0:
+                inst = entry[0]
+                if hasattr(inst, 'name'):
+                    method_names.append(inst.name)
+        if method_names:
+            methods[pool] = method_names
+    return methods
+
+
+class WorkflowEngine:
+    """
+    Orchestrates the multi-agent trading workflow.
+
+    Manages:
+    - Agent lifecycle and configuration
+    - Data pipeline execution
+    - Performance tracking
+    - Knowledge transfer and inventory pruning
+    """
+
+    def __init__(
+        self,
+        config: Optional[AppConfig] = None,
+        config_path: Optional[Path] = None,
+    ):
+        """
+        Initialize the workflow engine.
+
+        Args:
+            config: Application configuration
+            config_path: Path to YAML config file (used if config not provided)
+        """
+        # Load configuration
+        if config:
+            self.config = config
+        else:
+            path = config_path or DEFAULT_CONFIG_PATH
+            self.config = load_config(path)
+
+        # Load inventory methods
+        load_all_methods()
+
+        # Initialize agents
+        self.agents = self._load_agents()
+
+        # Initialize tracking and optimization
+        self.tracker = PerformanceTracker()
+        self.knowledge_transfer = KnowledgeTransfer(
+            tracker=self.tracker,
+            transfer_frequency=self.config.learning.knowledge_transfer_frequency,
+            trader_transfer_frequency=self.config.learning.trader_transfer_frequency,
+        )
+        self.pruner = InventoryPruner(
+            tracker=self.tracker,
+            pruning_frequency=self.config.learning.pruning_frequency,
+        )
+
+        # Ensure evaluator has tracker
+        if self.agents.get("evaluator"):
+            self.agents["evaluator"].tracker = self.tracker
+
+        # State
+        self.iteration = 0
+
+    def _load_agents(self) -> Dict[str, Any]:
+        """Load agents from configuration."""
+        config_path = DEFAULT_CONFIG_PATH
+
+        try:
+            if config_path.exists():
+                agents = build_agents_from_yaml(config_path)
+                if agents:
+                    print(f"[WORKFLOW] Loaded agents from {config_path}")
+                    return agents
+        except Exception as e:
+            print(f"[WORKFLOW] Failed to load agents from config: {e}")
+
+        # Fallback to defaults
+        print("[WORKFLOW] Using default agents")
+        return {
+            "analyst": AnalystAgent(id="A1"),
+            "researcher": ResearcherAgent(id="R1"),
+            "trader": TraderAgent(id="T1"),
+            "risk": RiskAgent(id="M1"),
+            "evaluator": EvaluatorAgent(id="E1"),
+        }
+
+    def run_iteration(self, input_cfg: OrchestratorInput) -> Dict[str, Any]:
+        """
+        Run one iteration of the trading workflow.
+
+        Pipeline:
+        1. Fetch data (prices + news)
+        2. Analyst: Extract features and trends
+        3. Researcher: Generate forecasts and signals
+        4. Trader: Create order proposal
+        5. Risk: Validate order
+        6. Evaluator: Score performance
+        7. (Optionally) Apply learning/pruning
+
+        Args:
+            input_cfg: Orchestrator input configuration
+
+        Returns:
+            Dict with iteration results
+        """
+        self.iteration += 1
+        print(f"\n{'='*60}")
+        print(f"[WORKFLOW] Iteration {self.iteration} START")
+        print(f"{'='*60}")
+
+        # Unpack configuration
+        config = input_cfg.config
+        data_cfg = config.data
+        news_cfg = config.news
+
+        # Calculate time window
+        if input_cfg.end:
+            end = datetime.fromisoformat(input_cfg.end).astimezone(timezone.utc)
+        else:
+            end = datetime.now(tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+        if input_cfg.start:
+            start = datetime.fromisoformat(input_cfg.start).astimezone(timezone.utc)
+        else:
+            start = end - timedelta(days=data_cfg.max_days)
+
+        print(f"[SETUP] Symbol: {input_cfg.symbol}, Window: {start.date()} → {end.date()}")
+
+        # Fetch data
+        price_df, news_items = self._fetch_data(input_cfg, start, end)
+
+        # Apply learning/pruning if due
+        self._apply_optimization()
+
+        # Get agents
+        analyst = self.agents["analyst"]
+        researcher = self.agents["researcher"]
+        trader = self.agents["trader"]
+        risk = self.agents["risk"]
+        evaluator = self.agents["evaluator"]
+
+        # ===== PHASE 1: Analysis & Research =====
+
+        # Analyst
+        features, trend = analyst.run(price_df)
+
+        # Researcher
+        research = researcher.run(features, trend)
+
+        # Determine news lookback
+        trader_lookback = trader.determine_news_lookback_days(
+            research, price_df, max_lookback_days=news_cfg.max_lookback_days
+        )
+        lookback_start = end - timedelta(days=trader_lookback)
+        print(f"[TRADER] News lookback: {trader_lookback} days")
+
+        # Filter news
+        filtered_news = self._filter_news(news_items, lookback_start, end, news_cfg.max_news_per_stream)
+
+        # ===== PHASE 2: Execution & Risk =====
+
+        # Trader
+        execution = trader.run(research, filtered_news, price_df)
+
+        # Risk check
+        risk_review = risk.run(execution, price_df)
+
+        # Handle risk review
+        final_execution, final_review = self._handle_risk_review(
+            execution, risk_review, risk, price_df
+        )
+
+        # ===== Evaluation =====
+
+        # Record trade if approved
+        if final_review.approved:
+            self._record_trade(evaluator, final_execution, research)
+
+        # Score
+        scores = evaluator.score(
+            {"exec": final_execution.__dict__, "risk": final_review.__dict__},
+            agent_id=trader.id,
+            agent_type="trader",
+        )
+
+        print(f"\n{'='*60}")
+        print(f"[WORKFLOW] Iteration {self.iteration} END")
+        print(f"{'='*60}\n")
+
+        return {
+            "iteration": self.iteration,
+            "features_shape": tuple(features.shape),
+            "trend_shape": tuple(trend.shape),
+            "research": research.__dict__,
+            "execution": final_execution.__dict__,
+            "risk_review": final_review.__dict__,
+            "scores": scores.__dict__,
+        }
+
+    def _fetch_data(
+        self,
+        input_cfg: OrchestratorInput,
+        start: datetime,
+        end: datetime,
+    ) -> tuple[pd.DataFrame, List[dict]]:
+        """Fetch price and news data."""
+        config = input_cfg.config
+        data_cfg = config.data
+        news_cfg = config.news
+
+        if run_pipeline is None:
+            raise ImportError("Data pipeline not available")
+
+        # Check API keys
+        if news_cfg.search_provider == "serpapi" and not os.getenv("SERPAPI_KEY"):
+            print("⚠️ SERPAPI_KEY is missing — news may be empty")
+
+        days = max(1, int((end - start).total_seconds() // 86400) + 1)
+        news_lookback = min(news_cfg.max_lookback_days, news_cfg.default_lookback_days)
+
+        out = run_pipeline(
+            symbol=_normalize_symbol(input_cfg.symbol),
+            timeframe=input_cfg.interval,
+            max_days=days,
+            out_dir=str(ROOT / data_cfg.out_dir),
+            offline_prices_csv=data_cfg.offline_prices_csv,
+            offline_news_jsonl=data_cfg.offline_news_jsonl,
+            news_lookback_days=news_lookback,
+            exchange_id=data_cfg.exchange_id,
+            news_query=news_cfg.news_query,
+            use_llm_news=news_cfg.use_llm_news,
+            max_news_per_stream=news_cfg.max_news_per_stream,
+            search_provider=news_cfg.search_provider,
+            llm_model=news_cfg.llm_model,
+            max_search_results_per_stream=news_cfg.max_search_results_per_stream,
+            require_published_signal=news_cfg.require_published_signal,
+        )
+
+        # Load prices
+        price_df = pd.read_csv(out["prices_csv"], parse_dates=["timestamp"])
+        price_df.set_index(pd.to_datetime(price_df["timestamp"], utc=True), inplace=True)
+        print(f"[DATA] Price bars: {len(price_df)}")
+
+        # Load news
+        raw_news: List[dict] = []
+        for key in ("news_micro_json", "news_macro_json"):
+            fpath = out.get(key)
+            if fpath and Path(fpath).exists():
+                with open(fpath, "r") as f:
+                    raw_news += json.load(f)
+
+        news_items = filter_news_3_stage(raw_news, from_dt=start, to_dt=end)
+        print(f"[DATA] News items: {len(news_items)}")
+
+        return price_df, news_items
+
+    def _filter_news(
+        self,
+        news_items: List[Any],
+        start: datetime,
+        end: datetime,
+        max_items: int,
+    ) -> List[Dict[str, Any]]:
+        """Filter news items by time range."""
+        filtered = []
+        for item in news_items:
+            if hasattr(item, 'published_at'):
+                pub_date = item.published_at
+            elif isinstance(item, dict):
+                pub_str = item.get('published_at', end.isoformat())
+                pub_date = dtparser.isoparse(pub_str)
+            else:
+                continue
+
+            if pub_date >= start:
+                filtered.append(item)
+
+        return filtered[:max_items]
+
+    def _handle_risk_review(
+        self,
+        execution: ExecutionSummary,
+        review: RiskReview,
+        risk_agent: RiskAgent,
+        price_df: pd.DataFrame,
+    ) -> tuple[ExecutionSummary, RiskReview]:
+        """Handle risk review, including regeneration for soft_fail."""
+
+        # Hard fail: abort immediately
+        if review.verdict == "hard_fail":
+            print("[WORKFLOW] HARD FAIL: Order aborted")
+            return execution, review
+
+        # Soft fail: attempt one regeneration
+        if review.verdict == "soft_fail":
+            print("[WORKFLOW] Soft fail: Attempting adjustment")
+
+            # Apply envelope adjustments
+            if "max_size" in review.envelope:
+                execution.position_size = min(
+                    execution.position_size,
+                    review.envelope["max_size"]
+                )
+            if "max_leverage" in review.envelope:
+                execution.leverage = min(
+                    execution.leverage,
+                    review.envelope["max_leverage"]
+                )
+
+            # Re-check
+            review2 = risk_agent.run(execution, price_df, regen_attempted=True)
+            return execution, review2
+
+        return execution, review
+
+    def _record_trade(
+        self,
+        evaluator: EvaluatorAgent,
+        execution: ExecutionSummary,
+        research: ResearchSummary,
+    ):
+        """Record trade for performance tracking."""
+        inventory_methods = {
+            "analyst": _get_inventory_methods(self.agents["analyst"]),
+            "researcher": _get_inventory_methods(self.agents["researcher"]),
+            "trader": _get_inventory_methods(self.agents["trader"]),
+            "risk": _get_inventory_methods(self.agents["risk"]),
+        }
+
+        evaluator.record_trade(
+            order_id=execution.order_id,
+            agent_id=self.agents["trader"].id,
+            agent_type="trader",
+            execution_summary=execution,
+            research_summary=research.__dict__,
+            inventory_methods_used=inventory_methods,
+        )
+
+    def _apply_optimization(self):
+        """Apply knowledge transfer and inventory pruning if due."""
+        agents_dict = {
+            self.agents["analyst"].id: self.agents["analyst"],
+            self.agents["researcher"].id: self.agents["researcher"],
+            self.agents["trader"].id: self.agents["trader"],
+            self.agents["risk"].id: self.agents["risk"],
+        }
+
+        try:
+            agents_dict = self.knowledge_transfer.transfer_all_types(
+                agents_dict, self.iteration
+            )
+        except Exception as e:
+            print(f"[WORKFLOW] Knowledge transfer skipped: {e}")
+
+        try:
+            agents_dict = self.pruner.prune_all_types(agents_dict, self.iteration)
+        except Exception as e:
+            print(f"[WORKFLOW] Inventory pruning skipped: {e}")
+
+
+# Convenience function for CLI
+def run_single_iteration(
+    symbol: str,
+    interval: str,
+    config_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Run a single iteration of the workflow."""
+    engine = WorkflowEngine(config_path=config_path)
+
+    input_cfg = OrchestratorInput(
+        symbol=symbol,
+        interval=interval,
+        config=engine.config,
+    )
+
+    return engine.run_iteration(input_cfg)

@@ -17,10 +17,12 @@ dependencies = [
     "python-dotenv",
     "openai",
     "beautifulsoup4",
+    "backtrader",
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["trading_agents*", "data_pipeline*"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

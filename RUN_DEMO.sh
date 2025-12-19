@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-python -m mas_finance.cli --symbol BTCUSD.PERP --interval 4h
+python -m trading_agents.cli --symbol BTCUSD.PERP --interval 4h
