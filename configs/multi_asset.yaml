@@ -38,7 +38,7 @@ data:
 news:
   use_llm_news: true
   news_query: "crypto OR bitcoin OR ethereum OR solana OR dogecoin OR ripple"
-  search_provider: "serpapi"
+  search_provider: "bocha"  # Options: "bocha" (recommended) or "serpapi"
   llm_model: "gpt-4o-mini"
   max_news_per_stream: 15
   max_search_results_per_stream: 50

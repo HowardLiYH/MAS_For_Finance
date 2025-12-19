@@ -30,7 +30,7 @@ class NewsConfig:
     """Configuration for news data."""
     use_llm_news: bool = True
     news_query: str = "bitcoin OR BTC"
-    search_provider: str = "serpapi"
+    search_provider: str = "bocha"  # Options: "bocha" (recommended) or "serpapi"
     llm_model: str = "gpt-4o-mini"
     max_news_per_stream: int = 10
     max_search_results_per_stream: int = 50

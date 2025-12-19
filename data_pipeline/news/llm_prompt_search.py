@@ -1,6 +1,6 @@
 """LLM‑prompted Micro/Macro news search.
 1) LLM plans micro/macro queries (JSON).
-2) SerpAPI executes queries with time filters.
+2) Search provider (Bocha or SerpAPI) executes queries with time filters.
 3) Strict post-filter by [from_dt, to_dt].
 """
 from __future__ import annotations
@@ -10,6 +10,7 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 from pipeline.schemas import NewsItem
 from .providers.search_serpapi import search_news_serpapi
+from .providers.search_bocha import search_news_bocha
 import re
 
 DEFAULT_MICRO = [
@@ -124,18 +125,58 @@ def _to_items(rows: List[Dict[str, Any]], symbol_hint: str) -> List[NewsItem]:
                                 published_at=ts, tickers=[f"{symbol_hint}-USD"], summary=r.get("snippet","")))
     return out
 
+def _search_provider(provider: str, query: str, from_dt: dt.datetime, to_dt: dt.datetime, limit: int) -> List[Dict[str, Any]]:
+    """
+    Execute search using the specified provider.
+    
+    Args:
+        provider: "bocha" or "serpapi"
+        query: Search query
+        from_dt: Start date
+        to_dt: End date
+        limit: Max results
+        
+    Returns:
+        List of result dicts
+    """
+    if provider == "bocha":
+        return search_news_bocha(query, from_dt, to_dt, limit=limit)
+    elif provider == "serpapi":
+        return search_news_serpapi(query, from_dt, to_dt, limit=limit)
+    else:
+        print(f"[NEWS] Unknown provider '{provider}', falling back to bocha")
+        return search_news_bocha(query, from_dt, to_dt, limit=limit)
+
+
 def search_micro_macro(*, topic: str, from_dt: dt.datetime, to_dt: dt.datetime,
-                                      max_per_stream: int, provider: str="serpapi",
+                                      max_per_stream: int, provider: str="bocha",
                                       llm_model: str="gpt-4o-mini", symbol_hint: str="BTC") -> Dict[str, List[NewsItem]]:
-
-
+    """
+    Search for micro and macro news using LLM-planned queries.
+    
+    Args:
+        topic: Topic to search for (e.g., "bitcoin")
+        from_dt: Start of date range
+        to_dt: End of date range
+        max_per_stream: Maximum items per stream (micro/macro)
+        provider: Search provider - "bocha" (default) or "serpapi"
+        llm_model: LLM model for query planning
+        symbol_hint: Symbol for tagging results
+        
+    Returns:
+        Dict with "micro" and "macro" lists of NewsItem
+    """
     plan = _llm_plan(topic, from_dt, to_dt, llm_model)
 
     def run(queries: List[str], stream: str) -> List[Dict[str, Any]]:
         seen, acc = set(), []
         qs = _massage_queries(queries, stream=stream)
         for q in qs:
-            rows = search_news_serpapi(q, from_dt, to_dt, limit=50) if provider == "serpapi" else []
+            try:
+                rows = _search_provider(provider, q, from_dt, to_dt, limit=50)
+            except Exception as e:
+                print(f"[NEWS] Search failed for query '{q}': {e}")
+                rows = []
             for r in rows:
                 u = r.get("url")
                 if u and u not in seen:
@@ -147,7 +188,11 @@ def search_micro_macro(*, topic: str, from_dt: dt.datetime, to_dt: dt.datetime,
             defaults = DEFAULT_MICRO if stream == "micro" else DEFAULT_MACRO
             extra = [x for x in defaults if x not in qs]
             for q in extra:
-                rows = search_news_serpapi(q, from_dt, to_dt, limit=50) if provider == "serpapi" else []
+                try:
+                    rows = _search_provider(provider, q, from_dt, to_dt, limit=50)
+                except Exception as e:
+                    print(f"[NEWS] Search failed for default query '{q}': {e}")
+                    rows = []
                 for r in rows:
                     u = r.get("url")
                     if u and u not in seen:
@@ -160,4 +205,6 @@ def search_micro_macro(*, topic: str, from_dt: dt.datetime, to_dt: dt.datetime,
     macro_rows = run(plan.macro, "macro")
     micro = _to_items(micro_rows, symbol_hint)[:max_per_stream]
     macro = _to_items(macro_rows, symbol_hint)[:max_per_stream]
+    
+    print(f"[NEWS] Found {len(micro)} micro and {len(macro)} macro articles using {provider}")
     return {"micro": micro, "macro": macro}

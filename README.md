@@ -228,6 +228,11 @@ Tracks performance metrics:
    * Bybit Testnet integration for paper trading validation
    * Order manager with position tracking
    * Slack/console/file notification channels
+* (2025.12.19) **Bocha Search Integration v0.4.1**
+   * Replaced expensive SerpAPI with Bocha Search API
+   * Bocha provides better Chinese/global web search at lower cost
+   * Supports time-based freshness filtering (oneDay, oneWeek, oneMonth)
+   * ISO date parsing for reliable date filtering
 
 ---
 

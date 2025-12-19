@@ -20,7 +20,7 @@ data:
 news:
   use_llm_news: true
   news_query: "bitcoin OR BTC"
-  search_provider: "serpapi"
+  search_provider: "bocha"
   llm_model: "gpt-4o-mini"
   max_news_per_stream: 10
   max_search_results_per_stream: 50
