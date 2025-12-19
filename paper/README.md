@@ -74,4 +74,3 @@ Total: ~8 pages (NeurIPS limit)
   year={2026}
 }
 ```
-

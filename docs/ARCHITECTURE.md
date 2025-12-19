@@ -708,3 +708,147 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...  # Optional
        ↓
 8. Next iteration → Step 3
 ```
+
+---
+
+## 🧬 Population-Based Learning Architecture
+
+```mermaid
+flowchart TB
+    subgraph POPULATIONS["AGENT POPULATIONS (5 variants each)"]
+        subgraph ANALYSTS["Analyst Population"]
+            A1["Technical"]
+            A2["Statistical"]
+            A3["Momentum"]
+            A4["Volatility"]
+            A5["Hybrid"]
+        end
+        
+        subgraph RESEARCHERS["Researcher Population"]
+            R1["Statistical"]
+            R2["Ensemble"]
+            R3["Bayesian"]
+            R4["Quantile"]
+            R5["Adaptive"]
+        end
+        
+        subgraph TRADERS["Trader Population"]
+            T1["Aggressive"]
+            T2["Conservative"]
+            T3["Momentum"]
+            T4["Contrarian"]
+            T5["Adaptive"]
+        end
+        
+        subgraph RISK["Risk Population"]
+            K1["Strict"]
+            K2["Moderate"]
+            K3["Dynamic"]
+            K4["VaR-based"]
+            K5["Drawdown"]
+        end
+    end
+    
+    subgraph EVALUATION["EVALUATION & LEARNING"]
+        SAMPLE["Sample Pipeline<br/>Combinations"]
+        EVAL["Evaluate on<br/>Market Data"]
+        SCORE["Score Agents<br/>(Shapley Values)"]
+        BEST["Identify Best ★"]
+        TRANSFER["Knowledge Transfer<br/>τ = 0.1"]
+        DIVERSITY["Diversity Check<br/>& Mutation"]
+    end
+    
+    POPULATIONS --> SAMPLE
+    SAMPLE --> EVAL
+    EVAL --> SCORE
+    SCORE --> BEST
+    BEST --> TRANSFER
+    TRANSFER --> DIVERSITY
+    DIVERSITY --> POPULATIONS
+```
+
+### Agent Variants
+
+| Role | Variant 1 | Variant 2 | Variant 3 | Variant 4 | Variant 5 |
+|------|-----------|-----------|-----------|-----------|-----------|
+| **Analyst** | Technical | Statistical | Momentum | Volatility | Hybrid |
+| **Researcher** | Statistical | Ensemble | Bayesian | Quantile | Adaptive |
+| **Trader** | Aggressive | Conservative | Momentum | Contrarian | Adaptive |
+| **Risk** | Strict | Moderate | Dynamic | VaR-based | Drawdown |
+
+### Knowledge Transfer Strategies
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    KNOWLEDGE TRANSFER STRATEGIES                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  1. SOFT UPDATE                                                         │
+│     new_params = (1-τ)·self + τ·best                                   │
+│     ├── Stable, gradual convergence                                    │
+│     └── τ decays from 0.2 → 0.05 over training                        │
+│                                                                         │
+│  2. DISTILLATION                                                        │
+│     Match outputs on reference inputs                                  │
+│     ├── Preserves agent's unique characteristics                      │
+│     └── Better for LLM-based agents                                   │
+│                                                                         │
+│  3. SELECTIVE TRANSFER                                                  │
+│     Only transfer high-importance parameters                           │
+│     ├── Based on parameter sensitivity analysis                       │
+│     └── Avoids transferring noise                                     │
+│                                                                         │
+│  4. DIVERSITY PRESERVATION                                              │
+│     If diversity < threshold:                                          │
+│     ├── Mutate non-elite agents                                       │
+│     ├── mutation_rate = 0.3                                           │
+│     └── mutation_strength ∝ diversity_deficit                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Scoring with Shapley Values
+
+```
+Pipeline Performance Attribution:
+
+For each agent a in pipeline P = {analyst, researcher, trader, risk}:
+
+  φ(a) = Σ   |S|!(|P|-|S|-1)!  [v(S ∪ {a}) - v(S)]
+        S⊆P\{a}    |P|!
+
+Where:
+  - v(S) = performance of coalition S
+  - φ(a) = Shapley value (fair credit) for agent a
+
+This ensures:
+  ✓ Efficiency: Σφ(a) = v(P)
+  ✓ Symmetry: Equal contribution → equal credit
+  ✓ Null player: No contribution → zero credit
+```
+
+### Population Workflow
+
+```
+Iteration N:
+│
+├── 1. Sample Pipeline Combinations (up to 25)
+│   └── Random sample from 5^4 = 625 possible combinations
+│
+├── 2. Evaluate Each Pipeline
+│   └── Run Analyst → Researcher → Trader → Risk → Get PnL
+│
+├── 3. Score Agents
+│   ├── Individual: Sharpe, PnL, hit rate per agent
+│   ├── Pipeline: Contribution to full pipeline success
+│   ├── Shapley: Fair credit assignment
+│   └── Diversity: Bonus for being different
+│
+├── 4. Knowledge Transfer (every 10 iterations)
+│   └── Best agent's params → Other agents (τ=0.1)
+│
+├── 5. Diversity Preservation
+│   └── If diversity < 0.2 → Mutate non-elite agents
+│
+└── 6. Next Iteration
+```
