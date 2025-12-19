@@ -1,4 +1,119 @@
-# Multi-Agent Trading System - Complete Architecture
+# PopAgent: Multi-Agent Trading System - Complete Architecture
+
+## 🧬 Core Innovation: Adaptive Method Selection
+
+PopAgent's key innovation is that agents **learn to SELECT methods** from a shared inventory, rather than being locked into fixed strategies.
+
+```mermaid
+flowchart TB
+    subgraph INNOVATION["🧬 POPAGENT INNOVATION"]
+        subgraph OLD["Traditional Approach"]
+            O1["Agent 1: Technical"] --> |fixed| O1M["RSI, MACD"]
+            O2["Agent 2: Statistical"] --> |fixed| O2M["Autocorr, Vol"]
+            O3["Agent 3: ML"] --> |fixed| O3M["HMM, Kalman"]
+        end
+        
+        subgraph NEW["PopAgent Approach"]
+            INV["INVENTORY<br/>(15 methods)"]
+            A1["Agent 1"] --> |selects| S1["[RSI, HMM, Wavelet]"]
+            A2["Agent 2"] --> |selects| S2["[MACD, STL, Kalman]"]
+            A3["Agent 3"] --> |selects| S3["[BB, Vol, Fourier]"]
+            INV --> A1
+            INV --> A2
+            INV --> A3
+        end
+    end
+    
+    subgraph LEARNING["📚 SELECTION LEARNING"]
+        UCB["UCB Selection<br/>(exploration + exploitation)"]
+        PREF["Preference Update<br/>pref += α × (reward - baseline)"]
+        TRANSFER["Preference Transfer<br/>Best → Others"]
+        UCB --> PREF --> TRANSFER
+    end
+```
+
+### Method Inventories
+
+| Role | # Methods | Categories |
+|------|-----------|------------|
+| **Analyst** | 15 | Technical, Statistical, Decomposition, ML |
+| **Researcher** | 12 | Statistical, ML, Uncertainty Quantification |
+| **Trader** | 10 | Execution, Sizing, Entry Strategies |
+| **Risk** | 10 | Position Limits, Loss Limits, Dynamic |
+
+### Selection Learning
+
+```
+For each agent:
+  1. SELECT methods using UCB + learned preferences
+  2. EXECUTE pipeline → get reward (PnL)
+  3. UPDATE preferences: pref[method] += α × advantage
+  4. TRANSFER: Copy best agent's preferences (soft update)
+```
+
+---
+
+## 🔄 Selector Workflow - Learning Loop
+
+```mermaid
+flowchart TB
+    subgraph ITERATION["📍 ONE ITERATION"]
+        START([Start]) --> SELECT
+        
+        subgraph SELECT["1️⃣ METHOD SELECTION"]
+            direction LR
+            A_INV["Analyst Inventory<br/>(15 methods)"] --> A_AGT["5 Agents select 3 each"]
+            R_INV["Researcher Inventory<br/>(12 methods)"] --> R_AGT["5 Agents select 3 each"]
+            T_INV["Trader Inventory<br/>(10 methods)"] --> T_AGT["5 Agents select 3 each"]
+            K_INV["Risk Inventory<br/>(10 methods)"] --> K_AGT["5 Agents select 3 each"]
+        end
+        
+        SELECT --> SAMPLE["2️⃣ SAMPLE PIPELINES<br/>25 combinations of<br/>(analyst, researcher, trader, risk)"]
+        
+        SAMPLE --> EVAL["3️⃣ EVALUATE<br/>Run each pipeline<br/>Measure PnL"]
+        
+        EVAL --> UPDATE["4️⃣ UPDATE PREFERENCES<br/>pref[m] += α × (reward - baseline)<br/>for each method m used"]
+        
+        UPDATE --> CHECK{"Iteration<br/>% 10 == 0?"}
+        CHECK -->|Yes| TRANSFER["5️⃣ TRANSFER<br/>Best agent's preferences<br/>→ Other agents"]
+        CHECK -->|No| DIVERS
+        TRANSFER --> DIVERS
+        
+        DIVERS["6️⃣ DIVERSITY CHECK<br/>If selection diversity low<br/>→ Boost exploration"]
+        
+        DIVERS --> END([Next Iteration])
+    end
+    
+    subgraph PREFERENCES["📊 PREFERENCE UPDATE"]
+        direction TB
+        M1["Method: RSI"] --> P1["pref: 0.8 ↑"]
+        M2["Method: MACD"] --> P2["pref: 0.3 ↓"]
+        M3["Method: HMM"] --> P3["pref: 1.2 ↑↑"]
+    end
+```
+
+### Selection Algorithm (UCB + Preferences)
+
+```mermaid
+flowchart LR
+    subgraph SCORE["Score Calculation"]
+        PREF["Base Preference<br/>π[method]"]
+        UCB["UCB Bonus<br/>√(2 ln(t) / n_method)"]
+        CTX["Context Bonus<br/>π_context[method]"]
+        NOISE["Exploration Noise<br/>N(0, σ)"]
+        
+        PREF --> SUM(("+"))
+        UCB --> SUM
+        CTX --> SUM
+        NOISE --> SUM
+        
+        SUM --> FINAL["Final Score"]
+    end
+    
+    FINAL --> TOPK["Select Top-3<br/>Methods"]
+```
+
+---
 
 ## 🎯 System Overview
 
@@ -723,7 +838,7 @@ flowchart TB
             A4["Volatility"]
             A5["Hybrid"]
         end
-        
+
         subgraph RESEARCHERS["Researcher Population"]
             R1["Statistical"]
             R2["Ensemble"]
@@ -731,7 +846,7 @@ flowchart TB
             R4["Quantile"]
             R5["Adaptive"]
         end
-        
+
         subgraph TRADERS["Trader Population"]
             T1["Aggressive"]
             T2["Conservative"]
@@ -739,7 +854,7 @@ flowchart TB
             T4["Contrarian"]
             T5["Adaptive"]
         end
-        
+
         subgraph RISK["Risk Population"]
             K1["Strict"]
             K2["Moderate"]
@@ -748,7 +863,7 @@ flowchart TB
             K5["Drawdown"]
         end
     end
-    
+
     subgraph EVALUATION["EVALUATION & LEARNING"]
         SAMPLE["Sample Pipeline<br/>Combinations"]
         EVAL["Evaluate on<br/>Market Data"]
@@ -757,7 +872,7 @@ flowchart TB
         TRANSFER["Knowledge Transfer<br/>τ = 0.1"]
         DIVERSITY["Diversity Check<br/>& Mutation"]
     end
-    
+
     POPULATIONS --> SAMPLE
     SAMPLE --> EVAL
     EVAL --> SCORE

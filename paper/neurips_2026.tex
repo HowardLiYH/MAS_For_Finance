@@ -31,7 +31,7 @@
 \newcommand{\etal}{\textit{et al.}}
 \newcommand{\etc}{\textit{etc.}}
 
-\title{Population-Based Continual Learning for \\Multi-Agent LLM Trading Systems}
+\title{PopAgent: Adaptive Method Selection in \\Multi-Agent LLM Trading via Continual Learning}
 
 \author{
   Author One\thanks{Equal contribution.} \\
@@ -52,22 +52,26 @@
 \maketitle
 
 \begin{abstract}
-Large Language Model (LLM) agents have shown promise in financial trading, but their performance is brittle and highly dependent on architecture choices. We propose \method{}, a novel framework that maintains \textbf{populations of diverse agents} for each role in a multi-agent trading pipeline and evolves them through continual learning. Unlike fixed-architecture systems, \method{} allows agents to learn from the best performers within their population while maintaining diversity to prevent premature convergence. We introduce (1) heterogeneous agent populations with 5 variants per role, (2) multiple knowledge transfer strategies including soft updates and distillation, (3) Shapley value-based credit assignment for fair evaluation, and (4) diversity preservation mechanisms to encourage exploration. Experiments on cryptocurrency trading across 5 assets (BTC, ETH, SOL, DOGE, XRP) demonstrate that \method{} achieves \textbf{[X]\% higher Sharpe ratio} compared to single-agent baselines while exhibiting \textbf{[X]\% lower maximum drawdown}. Our analysis reveals emergent specialization patterns where different agent variants excel in different market regimes.
+Multi-agent LLM trading systems suffer from brittleness: fixed strategy configurations cannot adapt to changing market conditions. We propose \method{}, a novel framework where agents \textbf{learn to SELECT which methods to use} from shared inventories, rather than being locked into fixed strategies. Each role (Analyst, Researcher, Trader, Risk Manager) has an inventory of 10-15 methods; agents maintain learned preferences and select 3 methods at each step using UCB-style exploration. Through continual learning, agents discover which method combinations work best in different market regimes, and \textbf{preference transfer} shares this meta-knowledge across the population. Our key contributions: (1) \textbf{method selection as meta-learning}---agents learn WHAT to use, not just HOW to use it; (2) \textbf{selection pressure} via inventory size exceeding agent capacity; (3) \textbf{preference transfer} for sharing selection knowledge; (4) \textbf{context-aware selection} adapting to market regimes. Experiments on 5 cryptocurrencies demonstrate \method{} achieves \textbf{[X]\% higher Sharpe ratio} with \textbf{[X]\% lower drawdown}, with learned preferences transferring effectively to unseen market conditions.
 \end{abstract}
 
 %==============================================================================
 \section{Introduction}
 %==============================================================================
 
-The application of Large Language Models (LLMs) to financial trading has attracted significant attention, with recent work demonstrating that LLM agents can interpret market signals, generate trading proposals, and reason about risk \cite{tradingagents2024}. However, existing LLM trading systems suffer from a fundamental limitation: \textbf{they rely on fixed agent architectures} whose performance is highly sensitive to design choices such as prompt templates, hyperparameters, and decision strategies.
+The application of Large Language Models (LLMs) to financial trading has attracted significant attention, with recent work demonstrating that LLM agents can interpret market signals, generate trading proposals, and reason about risk \cite{tradingagents2024}. However, existing LLM trading systems suffer from a fundamental limitation: \textbf{they lock agents into fixed strategies} whose effectiveness varies dramatically across market conditions.
 
-This brittleness manifests in several ways. First, the optimal agent configuration varies across market conditions---an aggressive trading strategy may excel during trending markets but fail during range-bound periods. Second, LLM agents exhibit poor uncertainty calibration, often expressing high confidence in incorrect predictions \cite{guo2017calibration}. Third, the multi-agent nature of trading systems introduces complex interdependencies where the effectiveness of one agent depends on the outputs of others.
+Consider a trading system with an analyst using RSI and MACD indicators. While this works well in trending markets, it fails during range-bound periods where mean-reversion methods excel. The core problem is not finding the ``best'' method---it is that the best method \textit{changes} with market conditions, and fixed systems cannot adapt.
 
-\textbf{Our key insight} is that rather than searching for a single optimal agent configuration, we should maintain \textbf{populations of diverse agents} that can adapt and evolve over time. Inspired by population-based training (PBT) \cite{jaderberg2017pbt} and multi-agent reinforcement learning, we propose \method{}, a framework where:
+\textbf{Our key insight} is that agents should \textbf{learn to SELECT which methods to use}, rather than being locked into fixed strategies. We propose \method{}, where each role maintains an \textit{inventory} of available methods (10-15 per role), and agents learn \textit{preferences} over these methods through reinforcement learning. At each step, an agent selects a subset of methods (e.g., 3 out of 15) based on learned preferences and exploration bonuses.
+
+This creates a \textbf{meta-learning system} for method selection:
 
 \begin{itemize}
-    \item Each role in the trading pipeline (Analyst, Researcher, Trader, Risk Manager) is represented by a \textbf{population of 5 agent variants} with different strategies and parameters.
-    \item Agents \textbf{learn from the best performers} in their population through soft parameter updates, output distillation, and selective knowledge transfer.
+    \item Each role has an \textbf{inventory of 10-15 methods} covering technical, statistical, ML-based, and other approaches.
+    \item Agents maintain \textbf{learned preferences} over methods, updated via reinforcement learning from trading outcomes.
+    \item \textbf{Selection pressure} arises because inventory size exceeds agent capacity ($|M| > N \times k$).
+    \item \textbf{Preference transfer} shares meta-knowledge about method effectiveness from best performers to others.
     \item A \textbf{diversity preservation mechanism} ensures populations do not collapse to a single configuration, enabling continued exploration.
     \item Credit is assigned fairly using \textbf{Shapley values}, attributing success to agents based on their marginal contribution to pipeline performance.
 \end{itemize}
@@ -111,85 +115,94 @@ The decision $d_t$ includes direction (long/short), position size, leverage, and
 
 \textbf{Key challenge:} The optimal agent for each role depends on (1) market conditions, (2) outputs of upstream agents, and (3) constraints from downstream agents. Fixed configurations cannot adapt to these dependencies.
 
-\subsection{Population-Based Agent Architecture}
+\subsection{Population-Based Agent Architecture with Method Selection}
 
 Instead of a single agent per role, we maintain populations:
 \begin{equation}
     \mathcal{P} = \{\mathcal{P}_\mathcal{A}, \mathcal{P}_\mathcal{R}, \mathcal{P}_\mathcal{T}, \mathcal{P}_\mathcal{K}\}
 \end{equation}
-where each population $\mathcal{P}_r = \{a_r^1, a_r^2, \ldots, a_r^N\}$ contains $N$ agent variants.
+where each population $\mathcal{P}_r = \{a_r^1, a_r^2, \ldots, a_r^N\}$ contains $N$ agents.
 
-\paragraph{Agent Variants.}
-Each variant has distinct characteristics:
+\paragraph{Key Innovation: Method Selection.}
+Unlike previous approaches that lock agents into fixed strategies, our agents \textbf{learn to SELECT which methods to use} from a shared inventory. Each role $r$ has an inventory $\mathcal{M}_r$ of available methods:
 
 \begin{table}[h]
 \centering
-\caption{Agent variants by role. Each variant has different strategies and parameters.}
-\label{tab:variants}
-\begin{tabular}{@{}llp{6cm}@{}}
+\caption{Method inventories by role. Each agent selects $k=3$ methods from the full inventory.}
+\label{tab:inventories}
+\begin{tabular}{@{}lcp{8cm}@{}}
 \toprule
-\textbf{Role} & \textbf{Variant} & \textbf{Description} \\
+\textbf{Role} & \textbf{$|\mathcal{M}_r|$} & \textbf{Available Methods} \\
 \midrule
-\multirow{5}{*}{Analyst}
-& Technical & RSI, MACD, Bollinger Bands \\
-& Statistical & Autocorrelation, volatility clustering \\
-& Momentum & Short-term price momentum \\
-& Volatility & ATR, range-based features \\
-& Hybrid & Adaptive combination \\
+Analyst & 15 & RSI, MACD, BollingerBands, ADX, Stochastic, Autocorrelation, VolatilityClustering, MeanReversion, Cointegration, STL, Wavelet, Fourier, HMM\_Regime, Kalman, IsolationForest \\
 \midrule
-\multirow{5}{*}{Researcher}
-& Statistical & ARIMA-based forecasting \\
-& Ensemble & Multiple model combination \\
-& Bayesian & Prior-based inference \\
-& Quantile & Full distribution estimation \\
-& Adaptive & Online learning \\
+Researcher & 12 & ARIMA, ExponentialSmoothing, VAR, GARCH, RandomForest, GradientBoosting, LSTM, TemporalFusion, Bootstrap, QuantileRegression, Bayesian, ConformalPrediction \\
 \midrule
-\multirow{5}{*}{Trader}
-& Aggressive & High leverage, large positions \\
-& Conservative & Low leverage, small positions \\
-& Momentum & Trend-following execution \\
-& Contrarian & Mean-reversion execution \\
-& Adaptive & Context-dependent \\
+Trader & 10 & AggressiveMarket, PassiveLimit, TWAP, VWAP, Kelly, FixedFractional, VolatilityScaled, Momentum, Contrarian, Breakout \\
 \midrule
-\multirow{5}{*}{Risk}
-& Strict & Tight limits (3x leverage, 5\% DD) \\
-& Moderate & Balanced (5x leverage, 10\% DD) \\
-& Dynamic & Condition-dependent limits \\
-& VaR-based & Value-at-Risk constraints \\
-& Drawdown & Drawdown-focused limits \\
+Risk & 10 & MaxLeverage, MaxPosition, Concentration, MaxDrawdown, DailyStop, TrailingStop, VaR, ExpectedShortfall, VolatilityAdjusted, RegimeAware \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Each agent $a_r^i$ is parameterized by $\theta_r^i$, which includes both numeric parameters (e.g., lookback periods, risk thresholds) and discrete choices (e.g., feature selection, prompt templates).
-
-\subsection{Knowledge Transfer Strategies}
-
-At regular intervals, we transfer knowledge from the best-performing agent to others in the population.
-
-\paragraph{Soft Update Transfer.}
-For numeric parameters, we perform exponential moving average updates:
+Each agent $a_r^i$ maintains a \textbf{preference vector} $\pi_r^i \in \mathbb{R}^{|\mathcal{M}_r|}$ over methods. The agent selects methods according to these preferences plus exploration:
 \begin{equation}
-    \theta_i \leftarrow (1 - \tau) \theta_i + \tau \theta^*
+    S_r^i = \text{top-}k\left(\pi_r^i + \alpha \cdot \text{UCB}(\mathcal{M}_r) + \epsilon\right)
 \end{equation}
-where $\theta^*$ are the parameters of the best agent and $\tau \in (0, 1)$ is the transfer rate. We decay $\tau$ over time:
+where UCB provides exploration bonus based on method usage counts, and $\epsilon$ is exploration noise.
+
+\paragraph{Why This Matters.}
+The key insight is that $|\mathcal{M}_r| > N \cdot k$ creates \textbf{selection pressure}---agents must learn which methods work best in which conditions. This is fundamentally different from fixed-strategy approaches where agents cannot adapt their method portfolio.
+
+\subsection{Selection Learning via Reinforcement}
+
+Each agent learns its preferences through reinforcement learning. After executing a pipeline with selected methods $S$ and receiving reward $R$ (PnL), we update:
 \begin{equation}
-    \tau_t = \tau_{\text{init}} + (\tau_{\text{final}} - \tau_{\text{init}}) \cdot \min(1, t / T_{\text{decay}})
+    \pi^i[m] \leftarrow \pi^i[m] + \alpha \cdot (R - \bar{R}) \quad \forall m \in S
+\end{equation}
+where $\bar{R}$ is the running baseline reward. This encourages selecting methods that contribute to positive outcomes.
+
+\paragraph{Context-Aware Selection.}
+Market conditions affect which methods perform well. We discretize context $c$ into regimes (e.g., trend direction, volatility level) and maintain context-specific preferences:
+\begin{equation}
+    \pi^i_{c}[m] \leftarrow \pi^i_{c}[m] + \alpha \cdot (R - \bar{R}) \quad \forall m \in S
+\end{equation}
+During selection, we combine global and context-specific preferences:
+\begin{equation}
+    \text{score}(m) = \pi^i[m] + \beta \cdot \pi^i_{c}[m] + \gamma \cdot \text{UCB}(m)
 \end{equation}
 
-\paragraph{Distillation Transfer.}
-For LLM-based agents, we additionally use output distillation. Given reference inputs $\{x_1, \ldots, x_M\}$, we collect outputs from the best agent $y_j^* = a^*(x_j)$ and encourage other agents to match:
-\begin{equation}
-    \mathcal{L}_{\text{distill}} = \sum_{j=1}^M \|a_i(x_j) - y_j^*\|^2
-\end{equation}
+\subsection{Preference Transfer: Knowledge Sharing for Method Selection}
 
-\paragraph{Selective Transfer.}
-Not all parameters contribute equally to success. We estimate parameter importance $I(\theta_k)$ based on sensitivity analysis and only transfer parameters with $I(\theta_k) > \gamma$:
+A critical component is how agents share knowledge about which methods work. Unlike parameter transfer in neural networks, we transfer \textbf{selection preferences}---learned beliefs about method effectiveness.
+
+\paragraph{Soft Preference Update.}
+At intervals of $T$ iterations, we identify the best-performing agent $a^*$ and update other agents' preferences:
 \begin{equation}
-    \theta_i^k \leftarrow \begin{cases}
-    (1-\tau)\theta_i^k + \tau\theta^{*k} & \text{if } I(\theta_k) > \gamma \\
-    \theta_i^k & \text{otherwise}
-    \end{cases}
+    \pi^i \leftarrow (1 - \tau) \pi^i + \tau \pi^*
+\end{equation}
+where $\pi^*$ are the preferences of the best agent and $\tau \in (0, 1)$ is the transfer rate.
+
+This differs fundamentally from parameter transfer: we are sharing \textbf{meta-knowledge} about strategy selection, not the strategies themselves. An agent receiving transferred preferences learns ``HMM\_Regime tends to work well'' without copying the specific HMM parameters.
+
+\paragraph{Context-Aware Preference Transfer.}
+We also transfer context-specific preferences, enabling agents to learn conditional method selection:
+\begin{equation}
+    \pi^i_c \leftarrow (1 - \tau) \pi^i_c + \tau \pi^*_c \quad \forall c \in \mathcal{C}
+\end{equation}
+where $\mathcal{C}$ is the set of discretized market contexts (e.g., bullish/bearish, low/high volatility).
+
+\paragraph{Diversity Preservation.}
+Pure preference transfer risks population collapse. We maintain diversity through:
+\begin{enumerate}
+    \item \textbf{Exploration rate boost}: If selection diversity $D$ falls below threshold, increase exploration noise
+    \item \textbf{Diversity reward}: Add bonus for selecting underutilized methods
+    \item \textbf{Partial transfer}: Only transfer preferences for top-performing methods
+\end{enumerate}
+
+Selection diversity is measured via pairwise Jaccard distance:
+\begin{equation}
+    D = \frac{1}{\binom{N}{2}} \sum_{i < j} \left(1 - \frac{|S^i \cap S^j|}{|S^i \cup S^j|}\right)
 \end{equation}
 
 \subsection{Credit Assignment with Shapley Values}
