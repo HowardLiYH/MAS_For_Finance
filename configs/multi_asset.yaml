@@ -1,33 +1,36 @@
-# Default configuration for Multi-Agent Trading System
+# Multi-Asset Configuration for 5-Coin Trading
+# Uses Bybit CSV data with cross-asset features
 
-symbol: "BTCUSD.PERP"
+symbol: "MULTI"  # Placeholder - actual symbols defined below
 timeframe: "4h"
 
 data:
-  exchange_id: "kraken"
+  exchange_id: "bybit"  # Reference only
   timeframe: "4h"
   max_days: 730
-  out_dir: "data"
-  # offline_prices_csv: "data/btc_4h.csv"
-  # offline_news_jsonl: "data/news.jsonl"
+  out_dir: "data/multi_asset"
 
-  # Multi-asset configuration
-  multi_asset: false
+  # Enable multi-asset mode
+  multi_asset: true
   symbols:
     - "BTC"
     - "ETH"
     - "SOL"
     - "DOGE"
     - "XRP"
-  # bybit_csv_dir: "/path/to/Bybit_CSV_Data"
+
+  # Path to Bybit CSV directory (update this path)
+  bybit_csv_dir: "/Users/yuhaoli/code/MAS_For_Finance/ML_Final_Project/Bybit_CSV_Data"
+
+  # Generate cross-asset market context features
   add_cross_features: true
 
 news:
   use_llm_news: true
-  news_query: "bitcoin OR BTC"
+  news_query: "crypto OR bitcoin OR ethereum OR solana"
   search_provider: "serpapi"
   llm_model: "gpt-4o-mini"
-  max_news_per_stream: 10
+  max_news_per_stream: 15
   max_search_results_per_stream: 50
   require_published_signal: true
   max_lookback_days: 30

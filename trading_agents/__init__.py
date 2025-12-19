@@ -17,6 +17,9 @@ def __getattr__(name):
     elif name == "run_single_iteration":
         from .workflow import run_single_iteration
         return run_single_iteration
+    elif name == "run_multi_asset":
+        from .workflow import run_multi_asset
+        return run_multi_asset
     elif name == "ResearchSummary":
         from .models import ResearchSummary
         return ResearchSummary
@@ -44,6 +47,7 @@ __all__ = [
     # Core
     "WorkflowEngine",
     "run_single_iteration",
+    "run_multi_asset",
     # Models
     "ResearchSummary",
     "ExecutionSummary",
