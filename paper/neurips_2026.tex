@@ -154,23 +154,62 @@ where UCB provides exploration bonus based on method usage counts, and $\epsilon
 \paragraph{Why This Matters.}
 The key insight is that $|\mathcal{M}_r| > N \cdot k$ creates \textbf{selection pressure}---agents must learn which methods work best in which conditions. This is fundamentally different from fixed-strategy approaches where agents cannot adapt their method portfolio.
 
-\subsection{Selection Learning via Reinforcement}
+\subsection{Reinforcement Learning Enhancements}
 
-Each agent learns its preferences through reinforcement learning. After executing a pipeline with selected methods $S$ and receiving reward $R$ (PnL), we update:
-\begin{equation}
-    \pi^i[m] \leftarrow \pi^i[m] + \alpha \cdot (R - \bar{R}) \quad \forall m \in S
-\end{equation}
-where $\bar{R}$ is the running baseline reward. This encourages selecting methods that contribute to positive outcomes.
+We employ three lightweight RL techniques that provide theoretical grounding while maintaining sample efficiency and interpretability---critical requirements for financial applications where deep RL often fails.
 
-\paragraph{Context-Aware Selection.}
-Market conditions affect which methods perform well. We discretize context $c$ into regimes (e.g., trend direction, volatility level) and maintain context-specific preferences:
+\subsubsection{Thompson Sampling for Bayesian Exploration}
+
+Instead of deterministic UCB exploration, we model each method's success probability as a Beta distribution and use Thompson Sampling \cite{thompson1933likelihood} for selection:
 \begin{equation}
-    \pi^i_{c}[m] \leftarrow \pi^i_{c}[m] + \alpha \cdot (R - \bar{R}) \quad \forall m \in S
+    \theta_m \sim \text{Beta}(\alpha_m, \beta_m)
 \end{equation}
-During selection, we combine global and context-specific preferences:
+where $\alpha_m$ and $\beta_m$ represent the cumulative evidence of successes and failures for method $m$. Selection proceeds by sampling from each method's distribution and choosing the top-$k$ samples:
 \begin{equation}
-    \text{score}(m) = \pi^i[m] + \beta \cdot \pi^i_{c}[m] + \gamma \cdot \text{UCB}(m)
+    S = \text{top-}k\left(\{\theta_m : m \in \mathcal{M}\}\right)
 \end{equation}
+
+After observing reward $R$, we update the Beta parameters:
+\begin{equation}
+    \alpha_m \leftarrow \alpha_m + \mathbb{1}[R > 0] \cdot (1 + |R| \cdot \lambda), \quad
+    \beta_m \leftarrow \beta_m + \mathbb{1}[R \leq 0] \cdot (1 + |R| \cdot \lambda)
+\end{equation}
+where $\lambda$ scales the magnitude of reward evidence.
+
+\textbf{Why Thompson Sampling?} Unlike UCB, Thompson Sampling naturally balances exploration and exploitation through uncertainty: methods with high variance (uncertain) will occasionally sample high values, encouraging exploration without explicit bonus terms. This is particularly valuable when reward signals are noisy (as in trading).
+
+\subsubsection{Contextual Baselines for Regime-Aware Learning}
+
+A critical insight is that the same reward has different meanings in different market conditions. A 2\% return is mediocre in a bull market but exceptional in a bear market. We maintain \textbf{context-specific baselines}:
+\begin{equation}
+    \bar{R}_c = \frac{1}{n_c} \sum_{t: c_t = c} R_t
+\end{equation}
+where $c$ is the discretized market context (trend $\times$ volatility $\times$ regime).
+
+The advantage is computed relative to the context-specific baseline:
+\begin{equation}
+    A_c = R - \bar{R}_c
+\end{equation}
+
+This enables proper credit assignment: the same method receiving the same absolute reward gets different credit depending on market conditions. Preference updates use the contextual advantage:
+\begin{equation}
+    \pi^i[m] \leftarrow \pi^i[m] + \alpha \cdot A_c \quad \forall m \in S
+\end{equation}
+
+\subsubsection{Multi-Step Returns for Temporal Credit}
+
+Trading decisions often have delayed consequences---a position entry may look bad initially but lead to substantial gains later. We use $n$-step returns with discount factor $\gamma$:
+\begin{equation}
+    G_t = R_t + \gamma R_{t+1} + \gamma^2 R_{t+2} + \ldots + \gamma^{n-1} R_{t+n-1}
+\end{equation}
+
+We maintain a queue of pending selections. When $n$ steps complete, we apply:
+\begin{equation}
+    \pi^i[m] \leftarrow \pi^i[m] + \alpha' \cdot (G_t - n \cdot \bar{R}_c) \quad \forall m \in S_t
+\end{equation}
+where $\alpha' < \alpha$ is a reduced learning rate (since immediate updates already occurred).
+
+\textbf{Why not full RL?} Deep RL methods (PPO, SAC) require orders of magnitude more samples, are prone to instability, and produce uninterpretable policies. Our bandit-based approach with these three enhancements achieves competitive performance with 100$\times$ fewer samples while remaining fully interpretable.
 
 \subsection{Preference Transfer: Knowledge Sharing for Method Selection}
 

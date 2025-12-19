@@ -54,6 +54,62 @@ Unlike fixed-strategy trading systems, **PopAgent** maintains populations of age
 
 ---
 
+## 🎰 RL Enhancements (v0.7.0)
+
+Three lightweight, theoretically-grounded RL improvements for robust learning:
+
+### 1. Thompson Sampling (Bayesian Exploration)
+
+Instead of deterministic UCB, agents sample from Beta distributions to naturally balance exploration and exploitation:
+
+```
+For each method m:
+  sample ~ Beta(α_m, β_m)  
+  # High uncertainty → high variance → more exploration
+  # High success rate → high mean → more exploitation
+```
+
+| Scenario | Alpha | Beta | Behavior |
+|----------|-------|------|----------|
+| New method | 1 | 1 | Uniform sampling (explore) |
+| 10 wins, 2 losses | 11 | 3 | High mean, exploit |
+| 3 wins, 10 losses | 4 | 11 | Low mean, avoid |
+
+### 2. Contextual Baselines (Regime-Aware Learning)
+
+Per-regime baselines for proper credit assignment:
+
+```
+Bull market: +2% is average (baseline = 2.5%)  → advantage ≈ 0
+Bear market: +2% is exceptional (baseline = -0.5%) → advantage ≈ +2.5%
+```
+
+Agents learn **context-specific** method preferences, not global averages.
+
+### 3. Multi-Step Returns (Temporal Credit Assignment)
+
+Discounted future rewards for methods that sacrifice short-term for long-term:
+
+```
+G_t = r_t + γ·r_{t+1} + γ²·r_{t+2} + ...
+
+Method A: Immediate +1%, then +0.5%, +0.5%  →  G = 1.86%
+Method B: Immediate -0.5%, then +3%, +2%   →  G = 4.32% ✓
+```
+
+Multi-step returns properly credit methods that set up future gains.
+
+### Configuration
+
+```yaml
+population:
+  use_thompson_sampling: true
+  gamma: 0.9        # Discount factor
+  n_step: 3         # Steps for multi-step returns
+```
+
+---
+
 ## 📊 Method Inventories
 
 Each role has **10-15 methods** available, but agents only select **3** at a time:

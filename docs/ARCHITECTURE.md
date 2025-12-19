@@ -45,11 +45,94 @@ flowchart TB
 
 ```
 For each agent:
-  1. SELECT methods using UCB + learned preferences
+  1. SELECT methods using Thompson Sampling
   2. EXECUTE pipeline → get reward (PnL)
-  3. UPDATE preferences: pref[method] += α × advantage
-  4. TRANSFER: Copy best agent's preferences (soft update)
+  3. UPDATE: Beta distributions + contextual preferences
+  4. MULTI-STEP: Process discounted future rewards
+  5. TRANSFER: Copy best agent's preferences (soft update)
 ```
+
+---
+
+## 🎰 RL Enhancements
+
+### Thompson Sampling Flow
+
+```mermaid
+flowchart LR
+    subgraph THOMPSON["Thompson Sampling Selection"]
+        BETA["For each method m:<br/>sample ~ Beta(α_m, β_m)"]
+        RANK["Rank by samples"]
+        TOP["Select top-3"]
+        BETA --> RANK --> TOP
+    end
+    
+    subgraph UPDATE["Bayesian Update"]
+        WIN["Reward > 0?"]
+        WIN -->|Yes| ALPHA["α_m += 1 + magnitude"]
+        WIN -->|No| BETAU["β_m += 1 + magnitude"]
+    end
+    
+    TOP --> EXECUTE["Execute Pipeline"]
+    EXECUTE --> WIN
+```
+
+### Contextual Baselines Flow
+
+```mermaid
+flowchart TB
+    subgraph CONTEXT["Context Discretization"]
+        MKT["Market Context"]
+        MKT --> TREND["Trend: bull/bear/neutral"]
+        MKT --> VOL["Volatility: low/mid/high"]
+        MKT --> REG["Regime: normal/volatile"]
+        TREND --> KEY["Context Key:<br/>trend:bull|vol:high|regime:normal"]
+        VOL --> KEY
+        REG --> KEY
+    end
+    
+    subgraph BASELINE["Per-Context Baseline"]
+        KEY --> LOOKUP["baseline = context_baselines[key]"]
+        LOOKUP --> ADV["advantage = reward - baseline"]
+        ADV --> UPDT["Update baseline incrementally"]
+    end
+    
+    subgraph CREDIT["Proper Credit Assignment"]
+        C1["Bull +2%<br/>baseline=2.5%<br/>advantage=-0.5"]
+        C2["Bear +2%<br/>baseline=-0.5%<br/>advantage=+2.5 ✓"]
+    end
+```
+
+### Multi-Step Returns Flow
+
+```mermaid
+flowchart LR
+    subgraph QUEUE["Pending Returns Queue"]
+        P1["t-2: methods, G=r₀"]
+        P2["t-1: methods, G=r₀+γr₁"]
+        P3["t: methods, G=r₀"]
+    end
+    
+    subgraph DISCOUNT["Discount Accumulation"]
+        R["New reward r_t"]
+        R --> D1["P1.G += γ²·r_t"]
+        R --> D2["P2.G += γ·r_t"]
+        R --> D3["P3.G += r_t"]
+    end
+    
+    subgraph APPLY["Apply When Complete"]
+        D1 --> DONE["steps_remaining == 0"]
+        DONE --> FINAL["Update preferences<br/>with full return G"]
+    end
+```
+
+### RL Components Summary
+
+| Component | What It Does | Algorithm |
+|-----------|--------------|-----------|
+| **Thompson Sampling** | Bayesian exploration | Beta(α, β) sampling |
+| **Contextual Baselines** | Regime-aware normalization | Per-context running mean |
+| **Multi-Step Returns** | Temporal credit | G = Σ γᵗ rₜ |
 
 ---
 
