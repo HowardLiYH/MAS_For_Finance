@@ -375,8 +375,10 @@ class WorkflowEngine:
         if run_pipeline is None:
             raise ImportError("Data pipeline not available")
 
-        # Check API keys
-        if news_cfg.search_provider == "serpapi" and not os.getenv("SERPAPI_KEY"):
+        # Check API keys for news search
+        if news_cfg.search_provider == "bocha" and not os.getenv("BOCHA_API_KEY"):
+            print("⚠️ BOCHA_API_KEY is missing — news may be empty")
+        elif news_cfg.search_provider == "serpapi" and not os.getenv("SERPAPI_KEY"):
             print("⚠️ SERPAPI_KEY is missing — news may be empty")
 
         days = max(1, int((end - start).total_seconds() // 86400) + 1)

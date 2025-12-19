@@ -157,7 +157,7 @@ def run_pipeline(
     max_news_per_stream: int = 10,
     news_candidate_urls_path: Optional[str] = None,
     require_published_signal: bool = True,
-    search_provider: str = "serpapi",
+    search_provider: str = "bocha",
     llm_model: str = "gpt-4o-mini",
     max_search_results_per_stream: int = 50,
 ) -> Dict[str, Any]:
@@ -277,7 +277,7 @@ def run_multi_asset_pipeline(
     news_query: str = "crypto OR bitcoin OR ethereum",
     use_llm_news: bool = True,
     max_news_per_stream: int = 10,
-    search_provider: str = "serpapi",
+    search_provider: str = "bocha",
     llm_model: str = "gpt-4o-mini",
 
     # Feature generation
@@ -450,7 +450,7 @@ def run_pipeline_auto(
     news_query: str = "bitcoin OR BTC",
     use_llm_news: bool = True,
     max_news_per_stream: int = 10,
-    search_provider: str = "serpapi",
+    search_provider: str = "bocha",
     llm_model: str = "gpt-4o-mini",
 
     # Multi-asset specific

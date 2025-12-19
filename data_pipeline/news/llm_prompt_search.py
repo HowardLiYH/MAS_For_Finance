@@ -128,14 +128,14 @@ def _to_items(rows: List[Dict[str, Any]], symbol_hint: str) -> List[NewsItem]:
 def _search_provider(provider: str, query: str, from_dt: dt.datetime, to_dt: dt.datetime, limit: int) -> List[Dict[str, Any]]:
     """
     Execute search using the specified provider.
-    
+
     Args:
         provider: "bocha" or "serpapi"
         query: Search query
         from_dt: Start date
         to_dt: End date
         limit: Max results
-        
+
     Returns:
         List of result dicts
     """
@@ -153,7 +153,7 @@ def search_micro_macro(*, topic: str, from_dt: dt.datetime, to_dt: dt.datetime,
                                       llm_model: str="gpt-4o-mini", symbol_hint: str="BTC") -> Dict[str, List[NewsItem]]:
     """
     Search for micro and macro news using LLM-planned queries.
-    
+
     Args:
         topic: Topic to search for (e.g., "bitcoin")
         from_dt: Start of date range
@@ -162,7 +162,7 @@ def search_micro_macro(*, topic: str, from_dt: dt.datetime, to_dt: dt.datetime,
         provider: Search provider - "bocha" (default) or "serpapi"
         llm_model: LLM model for query planning
         symbol_hint: Symbol for tagging results
-        
+
     Returns:
         Dict with "micro" and "macro" lists of NewsItem
     """
@@ -205,6 +205,6 @@ def search_micro_macro(*, topic: str, from_dt: dt.datetime, to_dt: dt.datetime,
     macro_rows = run(plan.macro, "macro")
     micro = _to_items(micro_rows, symbol_hint)[:max_per_stream]
     macro = _to_items(macro_rows, symbol_hint)[:max_per_stream]
-    
+
     print(f"[NEWS] Found {len(micro)} micro and {len(macro)} macro articles using {provider}")
     return {"micro": micro, "macro": macro}
