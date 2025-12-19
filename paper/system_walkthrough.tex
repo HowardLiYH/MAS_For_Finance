@@ -68,6 +68,91 @@
 \newpage
 
 %==============================================================================
+\section{Background and Prerequisites}
+%==============================================================================
+
+This section provides essential background for readers unfamiliar with the domain.
+
+\subsection{What is Algorithmic Trading?}
+
+\textbf{Algorithmic trading} uses computer programs to make trading decisions automatically. Instead of humans manually deciding when to buy or sell assets, algorithms analyze data and execute trades.
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={rectangle, draw, rounded corners, fill=blue!20, minimum width=2.5cm, minimum height=0.8cm, align=center, font=\footnotesize},
+    arrow/.style={->, thick}
+]
+\node[box] (data) at (0, 0) {Market Data};
+\node[box] (algo) at (3.5, 0) {Algorithm};
+\node[box] (decision) at (7, 0) {Buy/Sell\\Decision};
+\node[box] (exchange) at (10.5, 0) {Exchange};
+
+\draw[arrow] (data) -- (algo);
+\draw[arrow] (algo) -- (decision);
+\draw[arrow] (decision) -- (exchange);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Key Terms Glossary}
+
+\begin{center}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Term} & \textbf{Definition} \\
+\hline
+\textbf{LLM} & Large Language Model (e.g., GPT-4, Claude). AI models trained on text that can understand and generate human language. \\
+\hline
+\textbf{OHLCV} & Open, High, Low, Close, Volume -- the 5 key data points for each time period (candle) in price data. \\
+\hline
+\textbf{Agent} & An autonomous software component that perceives its environment and takes actions to achieve goals. \\
+\hline
+\textbf{Multi-Agent System} & Multiple agents working together, each specializing in different tasks. \\
+\hline
+\textbf{Method} & A specific algorithm or technique (e.g., RSI, ARIMA, Kelly Criterion). \\
+\hline
+\textbf{Inventory} & The pool of available methods an agent can choose from. \\
+\hline
+\textbf{Perpetual Futures} & Cryptocurrency derivatives that let traders bet on price movements with leverage, no expiration date. \\
+\hline
+\textbf{PnL} & Profit and Loss -- how much money was made or lost. \\
+\hline
+\textbf{Sharpe Ratio} & Risk-adjusted return measure. Higher = better. \\
+\hline
+\textbf{Drawdown} & Peak-to-trough decline in portfolio value. \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Why is This Problem Hard?}
+
+\begin{enumerate}
+    \item \textbf{Non-stationary markets}: What works today may fail tomorrow. Bull markets, bear markets, and sideways markets require different strategies.
+    
+    \item \textbf{Limited data}: Unlike games with unlimited simulations, financial data is scarce. We can't just ``play'' millions of episodes.
+    
+    \item \textbf{Noisy signals}: Price movements are partly random. Even good strategies lose sometimes.
+    
+    \item \textbf{Interpretability requirement}: Traders need to understand \textit{why} the system makes decisions. Black-box neural networks are often rejected.
+    
+    \item \textbf{Strategy selection}: With hundreds of possible techniques, choosing which ones to use is itself a hard learning problem.
+\end{enumerate}
+
+\subsection{What is a ``Method'' in Our System?}
+
+A \textbf{method} is a specific analytical technique or algorithm. Examples:
+
+\begin{itemize}
+    \item \textbf{RSI} (Relative Strength Index): Measures if an asset is overbought or oversold
+    \item \textbf{ARIMA}: Statistical model for forecasting time series
+    \item \textbf{Kelly Criterion}: Formula for optimal position sizing
+    \item \textbf{VaR} (Value at Risk): Estimates worst-case loss
+\end{itemize}
+
+PopAgent's innovation: instead of hard-coding which methods to use, agents \textit{learn} which methods work best.
+
+\newpage
+
+%==============================================================================
 \section{Executive Summary}
 %==============================================================================
 
@@ -153,6 +238,55 @@ Static configurations & Adapts to market conditions \\
 \end{figure}
 
 %==============================================================================
+\section{Motivation: Why Build This System?}
+%==============================================================================
+
+\subsection{The Problem with Existing Approaches}
+
+\begin{center}
+\begin{tikzpicture}[
+    problem/.style={rectangle, draw, fill=red!20, rounded corners, minimum width=4cm, minimum height=1cm, align=center, font=\small},
+    solution/.style={rectangle, draw, fill=green!20, rounded corners, minimum width=4cm, minimum height=1cm, align=center, font=\small}
+]
+
+% Problems
+\node[problem] at (0, 4) {\textbf{Fixed Strategies}\\Can't adapt to\\market changes};
+\node[problem] at (5, 4) {\textbf{Deep RL}\\Needs 100K+ samples\\Unstable, uninterpretable};
+\node[problem] at (10, 4) {\textbf{Single Agent}\\One strategy = fragile\\No diversity};
+
+% Arrow
+\draw[->, thick] (5, 3) -- (5, 2);
+
+% Solution
+\node[solution, minimum width=10cm] at (5, 1) {\textbf{PopAgent}: Population of agents learn to select methods\\Lightweight RL, interpretable, sample-efficient};
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Research Questions We Address}
+
+\begin{enumerate}
+    \item \textbf{RQ1}: Can agents learn \textit{which methods to use} rather than just tuning parameters?
+    
+    \item \textbf{RQ2}: Can population-based exploration discover effective method combinations?
+    
+    \item \textbf{RQ3}: Can lightweight RL techniques (bandits) match deep RL performance with 100$\times$ fewer samples?
+    
+    \item \textbf{RQ4}: Can knowledge transfer accelerate learning without collapsing diversity?
+\end{enumerate}
+
+\subsection{Our Contribution}
+
+\begin{keybox}[PopAgent Contributions]
+\begin{enumerate}
+    \item \textbf{Method Selection Framework}: First system where agents learn \textit{what} to use, not just parameters
+    \item \textbf{Population-Based Exploration}: 20 agents explore the combinatorial space of method selections
+    \item \textbf{Lightweight RL}: Thompson Sampling + Contextual Baselines + Multi-Step Returns
+    \item \textbf{Interpretable Preferences}: Clear, inspectable method preferences (no black boxes)
+\end{enumerate}
+\end{keybox}
+
+%==============================================================================
 \section{System Overview}
 %==============================================================================
 
@@ -178,20 +312,20 @@ Each trading iteration follows this flow:
     data/.style={rectangle, draw, fill=yellow!20, text width=2cm, text centered, rounded corners, minimum height=0.8cm, font=\footnotesize},
     arrow/.style={->, thick, >=stealth},
     label/.style={font=\footnotesize, color=gray}]
-    
+
     % Data inputs
     \node[data] (price) at (-2, 2) {Price Data\\OHLCV};
     \node[data] (news) at (-2, -1) {News\\Sentiment};
-    
+
     % Pipeline
     \node[block, fill=purple!20] (analyst) at (1, 1) {\textbf{Analyst}\\15 methods\\selects 3};
     \node[block, fill=blue!20] (researcher) at (4.5, 1) {\textbf{Researcher}\\12 methods\\selects 3};
     \node[block, fill=green!20] (trader) at (8, 1) {\textbf{Trader}\\10 methods\\selects 3};
     \node[block, fill=red!20] (risk) at (11.5, 1) {\textbf{Risk Mgr}\\10 methods\\selects 3};
-    
+
     % Output
     \node[data, fill=green!30] (order) at (14, 1) {Final\\Order};
-    
+
     % Arrows with labels
     \draw[arrow] (price) -- (analyst);
     \draw[arrow] (analyst) -- node[above, label] {features} (researcher);
@@ -199,13 +333,13 @@ Each trading iteration follows this flow:
     \draw[arrow] (news) -| (trader);
     \draw[arrow] (trader) -- node[above, label] {proposal} (risk);
     \draw[arrow] (risk) -- (order);
-    
+
     % Inventory indicators
     \node[font=\tiny, color=purple!60!black] at (1, -0.3) {RSI, MACD, HMM...};
     \node[font=\tiny, color=blue!60!black] at (4.5, -0.3) {ARIMA, LSTM...};
     \node[font=\tiny, color=green!60!black] at (8, -0.3) {Kelly, TWAP...};
     \node[font=\tiny, color=red!60!black] at (11.5, -0.3) {VaR, MaxDD...};
-    
+
 \end{tikzpicture}
 \caption{The four-stage trading pipeline. Each agent selects 3 methods from its inventory.}
 \label{fig:pipeline}
@@ -1058,17 +1192,64 @@ trading_agents/
 
 \begin{enumerate}
     \item \textbf{Method Selection as Meta-Learning}: Agents learn WHAT to use, not just parameters
-    
+
     \item \textbf{Selection Pressure}: Inventory (15) $>$ Selection (3) creates meaningful choices
-    
+
     \item \textbf{Lightweight RL}: Thompson Sampling + Contextual Baselines + Multi-Step Returns
-    
+
     \item \textbf{Population Dynamics}: 20 agents explore, best knowledge transfers to others
-    
+
     \item \textbf{Interpretability}: Clear preferences, no black-box neural networks
-    
+
     \item \textbf{Sample Efficiency}: Works with limited financial data
 \end{enumerate}
+
+%==============================================================================
+\section{Practical Usage}
+%==============================================================================
+
+\subsection{How to Run the System}
+
+\begin{lstlisting}[language=bash]
+# 1. Setup environment
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+# 2. Copy price data
+cp /path/to/Bybit_CSV_Data/*.csv data/bybit/
+
+# 3. Set API keys (in .env file)
+BOCHA_API_KEY=your_news_api_key
+BYBIT_TESTNET_KEY=your_testnet_key
+BYBIT_TESTNET_SECRET=your_testnet_secret
+
+# 4. Run the adaptive method selection workflow
+python -m trading_agents.cli selector --iterations 50
+\end{lstlisting}
+
+\subsection{Expected Output}
+
+After running, you'll see:
+\begin{itemize}
+    \item \textbf{Method preferences}: Which methods each agent prefers
+    \item \textbf{Performance metrics}: Sharpe ratio, PnL, drawdown
+    \item \textbf{Learning curves}: How preferences evolved over iterations
+    \item \textbf{Best pipeline}: Top-performing agent combination
+\end{itemize}
+
+\subsection{Configuration}
+
+Key settings in \texttt{configs/multi\_asset.yaml}:
+
+\begin{lstlisting}[language=yaml]
+population:
+  size: 5               # Agents per role
+  max_methods: 3        # Methods selected per agent
+  transfer_frequency: 10  # Transfer every N iterations
+  learning_rate: 0.1    # Preference update rate
+  exploration_rate: 0.15  # Random exploration
+\end{lstlisting}
 
 %==============================================================================
 \section{References for Further Reading}
@@ -1153,7 +1334,7 @@ trading_agents/
 \hline
 \textbf{Role} & \textbf{Category} & \textbf{Methods} \\
 \hline
-\multirow{4}{*}{Analyst (15)} 
+\multirow{4}{*}{Analyst (15)}
 & Technical & RSI, MACD, BollingerBands, ADX, Stochastic \\
 & Statistical & Autocorrelation, VolatilityClustering, MeanReversion, Cointegration \\
 & Decomposition & STL, WaveletTransform, FourierAnalysis \\
