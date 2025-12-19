@@ -1,26 +1,21 @@
-# Default configuration for Multi-Agent Trading System
+# =============================================================================
+# BTC Single-Asset Configuration
+# =============================================================================
+# For backtesting BTC only (without cross-asset features)
+# =============================================================================
 
 symbol: "BTCUSD.PERP"
 timeframe: "4h"
 
 data:
-  exchange_id: "kraken"
+  exchange_id: "bybit"
   timeframe: "4h"
   max_days: 730
-  out_dir: "data"
-  # offline_prices_csv: "data/btc_4h.csv"
-  # offline_news_jsonl: "data/news.jsonl"
+  out_dir: "data/single/btc"
 
-  # Multi-asset configuration
+  # Single-asset mode
   multi_asset: false
-  symbols:
-    - "BTC"
-    - "ETH"
-    - "SOL"
-    - "DOGE"
-    - "XRP"
-  # bybit_csv_dir: "/path/to/Bybit_CSV_Data"
-  add_cross_features: true
+  offline_prices_csv: "data/bybit/Bybit_BTC.csv"
 
 news:
   use_llm_news: true
@@ -30,16 +25,13 @@ news:
   max_news_per_stream: 10
   max_search_results_per_stream: 50
   require_published_signal: true
-  max_lookback_days: 30
-  default_lookback_days: 14
+  max_lookback_days: 14
+  default_lookback_days: 7
 
 learning:
   knowledge_transfer_frequency: 10
   trader_transfer_frequency: 20
   pruning_frequency: 50
-  transfer_ratio: 0.5
-  min_usage_threshold: 5
-  min_success_rate: 0.3
 
 agents:
   analyst:
@@ -57,23 +49,17 @@ agents:
     inventory:
       researcher.forecasting:
         - arima_x
-        - tft
       researcher.uncertainty:
         - bootstrap_ensemble
-        - quantile_regression
       researcher.calibration:
         - temperature_scaling
-        - conformal_icp
 
   trader:
     id: "T1"
     use_llm: true
-    llm_model: "gpt-4o-mini"
-    log_thoughts: true
     inventory:
       trader.styles:
         - aggressive_market
-        - passive_laddered_limit
 
   risk:
     id: "M1"
@@ -81,8 +67,6 @@ agents:
       risk.checks:
         - var_safe_band
         - leverage_position_limits
-        - liquidation_safety
-        - margin_call_risk
 
   evaluator:
     id: "E1"

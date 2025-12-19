@@ -41,9 +41,11 @@ from .agents.evaluator import EvaluatorAgent
 
 # Data pipeline import
 try:
-    from pipeline.data_pipeline import run_pipeline
+    from pipeline.data_pipeline import run_pipeline, run_multi_asset_pipeline, run_pipeline_auto
 except ImportError:
     run_pipeline = None
+    run_multi_asset_pipeline = None
+    run_pipeline_auto = None
 
 DEFAULT_CONFIG_PATH = ROOT / "configs" / "default.yaml"
 
@@ -425,6 +427,182 @@ class WorkflowEngine:
         except Exception as e:
             print(f"[WORKFLOW] Inventory pruning skipped: {e}")
 
+    def run_multi_asset_iteration(self, input_cfg: OrchestratorInput) -> Dict[str, Any]:
+        """
+        Run one iteration for all assets in multi-asset mode.
+
+        Processes each symbol sequentially with shared market context.
+
+        Args:
+            input_cfg: Orchestrator input configuration
+
+        Returns:
+            Dict with results for all assets
+        """
+        self.iteration += 1
+        print(f"\n{'='*60}")
+        print(f"[WORKFLOW] Multi-Asset Iteration {self.iteration} START")
+        print(f"{'='*60}")
+
+        config = input_cfg.config
+        data_cfg = config.data
+        news_cfg = config.news
+
+        # Calculate time window
+        if input_cfg.end:
+            end = datetime.fromisoformat(input_cfg.end).astimezone(timezone.utc)
+        else:
+            end = datetime.now(tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+        if input_cfg.start:
+            start = datetime.fromisoformat(input_cfg.start).astimezone(timezone.utc)
+        else:
+            start = end - timedelta(days=data_cfg.max_days)
+
+        symbols = input_cfg.active_symbols
+        print(f"[SETUP] Symbols: {symbols}, Window: {start.date()} → {end.date()}")
+
+        # Fetch multi-asset data
+        multi_data = self._fetch_multi_asset_data(input_cfg, start, end)
+
+        assets = multi_data.get("assets", {})
+        market_ctx = multi_data.get("market_context")
+        news_items = self._load_news_items(multi_data)
+
+        # Apply learning/pruning if due
+        self._apply_optimization()
+
+        # Process each symbol
+        results = {}
+        for symbol in symbols:
+            if symbol not in assets:
+                print(f"[WORKFLOW] Skipping {symbol}: no data")
+                continue
+
+            print(f"\n--- Processing {symbol} ---")
+
+            asset_result = self._process_single_asset(
+                symbol=symbol,
+                price_df=assets[symbol],
+                news_items=news_items,
+                market_ctx=market_ctx,
+                end=end,
+                news_cfg=news_cfg,
+            )
+            results[symbol] = asset_result
+
+        print(f"\n{'='*60}")
+        print(f"[WORKFLOW] Multi-Asset Iteration {self.iteration} END")
+        print(f"{'='*60}\n")
+
+        return {
+            "iteration": self.iteration,
+            "mode": "multi_asset",
+            "symbols": list(results.keys()),
+            "results": results,
+            "market_context_available": market_ctx is not None,
+        }
+
+    def _fetch_multi_asset_data(
+        self,
+        input_cfg: OrchestratorInput,
+        start: datetime,
+        end: datetime,
+    ) -> Dict[str, Any]:
+        """Fetch multi-asset price and news data."""
+        config = input_cfg.config
+        data_cfg = config.data
+        news_cfg = config.news
+
+        if run_multi_asset_pipeline is None:
+            raise ImportError("Multi-asset data pipeline not available")
+
+        return run_multi_asset_pipeline(
+            symbols=data_cfg.symbols,
+            bybit_csv_dir=data_cfg.bybit_csv_dir,
+            out_dir=str(ROOT / data_cfg.out_dir),
+            start_date=start.isoformat() if start else None,
+            end_date=end.isoformat() if end else None,
+            news_lookback_days=news_cfg.default_lookback_days,
+            news_query=news_cfg.news_query,
+            use_llm_news=news_cfg.use_llm_news,
+            max_news_per_stream=news_cfg.max_news_per_stream,
+            search_provider=news_cfg.search_provider,
+            llm_model=news_cfg.llm_model,
+            add_cross_features=data_cfg.add_cross_features,
+        )
+
+    def _load_news_items(self, multi_data: Dict[str, Any]) -> List[dict]:
+        """Load news items from multi-asset pipeline output."""
+        raw_news: List[dict] = []
+        for key in ("news_micro_json", "news_macro_json"):
+            fpath = multi_data.get(key)
+            if fpath and Path(fpath).exists():
+                with open(fpath, "r") as f:
+                    raw_news += json.load(f)
+        return raw_news
+
+    def _process_single_asset(
+        self,
+        symbol: str,
+        price_df: pd.DataFrame,
+        news_items: List[dict],
+        market_ctx: Any,
+        end: datetime,
+        news_cfg: Any,
+    ) -> Dict[str, Any]:
+        """Process a single asset through the agent pipeline."""
+        # Get agents
+        analyst = self.agents["analyst"]
+        researcher = self.agents["researcher"]
+        trader = self.agents["trader"]
+        risk = self.agents["risk"]
+        evaluator = self.agents["evaluator"]
+
+        # ===== PHASE 1: Analysis & Research =====
+        features, trend = analyst.run(price_df)
+        research = researcher.run(features, trend)
+
+        # Determine news lookback
+        trader_lookback = trader.determine_news_lookback_days(
+            research, price_df, max_lookback_days=news_cfg.max_lookback_days
+        )
+        lookback_start = end - timedelta(days=trader_lookback)
+
+        # Filter news
+        filtered_news = self._filter_news(
+            news_items, lookback_start, end, news_cfg.max_news_per_stream
+        )
+
+        # ===== PHASE 2: Execution & Risk =====
+        execution = trader.run(research, filtered_news, price_df)
+        risk_review = risk.run(execution, price_df)
+
+        # Handle risk review
+        final_execution, final_review = self._handle_risk_review(
+            execution, risk_review, risk, price_df
+        )
+
+        # ===== Evaluation =====
+        if final_review.approved:
+            self._record_trade(evaluator, final_execution, research)
+
+        scores = evaluator.score(
+            {"exec": final_execution.__dict__, "risk": final_review.__dict__},
+            agent_id=trader.id,
+            agent_type="trader",
+        )
+
+        return {
+            "symbol": symbol,
+            "features_shape": tuple(features.shape),
+            "trend_shape": tuple(trend.shape),
+            "research": research.__dict__,
+            "execution": final_execution.__dict__,
+            "risk_review": final_review.__dict__,
+            "scores": scores.__dict__,
+        }
+
 
 # Convenience function for CLI
 def run_single_iteration(
@@ -442,3 +620,30 @@ def run_single_iteration(
     )
 
     return engine.run_iteration(input_cfg)
+
+
+def run_multi_asset(
+    config_path: Optional[Path] = None,
+    symbols: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Run a multi-asset iteration of the workflow.
+
+    Args:
+        config_path: Path to config file (should have multi_asset: true)
+        symbols: Optional list of symbols to override config
+
+    Returns:
+        Dict with results for all assets
+    """
+    config_path = config_path or (ROOT / "configs" / "multi_asset.yaml")
+    engine = WorkflowEngine(config_path=config_path)
+
+    input_cfg = OrchestratorInput(
+        symbol="MULTI",
+        interval=engine.config.timeframe,
+        config=engine.config,
+        symbols=symbols,
+    )
+
+    return engine.run_multi_asset_iteration(input_cfg)

@@ -1,45 +1,30 @@
-# Default configuration for Multi-Agent Trading System
+# =============================================================================
+# ETH Single-Asset Configuration
+# =============================================================================
 
-symbol: "BTCUSD.PERP"
+symbol: "ETHUSD.PERP"
 timeframe: "4h"
 
 data:
-  exchange_id: "kraken"
+  exchange_id: "bybit"
   timeframe: "4h"
   max_days: 730
-  out_dir: "data"
-  # offline_prices_csv: "data/btc_4h.csv"
-  # offline_news_jsonl: "data/news.jsonl"
+  out_dir: "data/single/eth"
 
-  # Multi-asset configuration
   multi_asset: false
-  symbols:
-    - "BTC"
-    - "ETH"
-    - "SOL"
-    - "DOGE"
-    - "XRP"
-  # bybit_csv_dir: "/path/to/Bybit_CSV_Data"
-  add_cross_features: true
+  offline_prices_csv: "data/bybit/Bybit_ETH.csv"
 
 news:
   use_llm_news: true
-  news_query: "bitcoin OR BTC"
+  news_query: "ethereum OR ETH"
   search_provider: "serpapi"
   llm_model: "gpt-4o-mini"
   max_news_per_stream: 10
-  max_search_results_per_stream: 50
-  require_published_signal: true
-  max_lookback_days: 30
-  default_lookback_days: 14
 
 learning:
   knowledge_transfer_frequency: 10
   trader_transfer_frequency: 20
   pruning_frequency: 50
-  transfer_ratio: 0.5
-  min_usage_threshold: 5
-  min_success_rate: 0.3
 
 agents:
   analyst:
@@ -57,23 +42,17 @@ agents:
     inventory:
       researcher.forecasting:
         - arima_x
-        - tft
       researcher.uncertainty:
         - bootstrap_ensemble
-        - quantile_regression
       researcher.calibration:
         - temperature_scaling
-        - conformal_icp
 
   trader:
     id: "T1"
     use_llm: true
-    llm_model: "gpt-4o-mini"
-    log_thoughts: true
     inventory:
       trader.styles:
         - aggressive_market
-        - passive_laddered_limit
 
   risk:
     id: "M1"
@@ -81,8 +60,6 @@ agents:
       risk.checks:
         - var_safe_band
         - leverage_position_limits
-        - liquidation_safety
-        - margin_call_risk
 
   evaluator:
     id: "E1"

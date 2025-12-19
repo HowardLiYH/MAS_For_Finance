@@ -1,0 +1,101 @@
+# =============================================================================
+# Multi-Asset Configuration for 5-Coin Trading
+# =============================================================================
+# Uses Bybit perpetual futures data with cross-asset market context features.
+# Trades: BTC, ETH, SOL, DOGE, XRP
+# =============================================================================
+
+symbol: "MULTI"
+timeframe: "4h"
+
+data:
+  exchange_id: "bybit"
+  timeframe: "4h"
+  max_days: 730  # 2 years of data
+  out_dir: "data/multi_asset"
+
+  # ========================
+  # Multi-Asset Mode
+  # ========================
+  multi_asset: true
+  symbols:
+    - "BTC"   # Bitcoin
+    - "ETH"   # Ethereum
+    - "SOL"   # Solana
+    - "DOGE"  # Dogecoin
+    - "XRP"   # Ripple
+
+  # Path to Bybit CSV data directory
+  # Update this to your local path or use relative path
+  bybit_csv_dir: "data/bybit"
+
+  # Generate cross-asset market context features:
+  # - btc_dominance, altcoin_momentum, eth_btc_ratio
+  # - cross_oi_delta, aggregate_funding, risk_on_off
+  # - market_volatility, cross_correlation
+  add_cross_features: true
+
+news:
+  use_llm_news: true
+  news_query: "crypto OR bitcoin OR ethereum OR solana OR dogecoin OR ripple"
+  search_provider: "serpapi"
+  llm_model: "gpt-4o-mini"
+  max_news_per_stream: 15
+  max_search_results_per_stream: 50
+  require_published_signal: true
+  max_lookback_days: 30
+  default_lookback_days: 14
+
+learning:
+  knowledge_transfer_frequency: 10   # Transfer knowledge every K rounds
+  trader_transfer_frequency: 20      # Trader-specific transfer every 2K
+  pruning_frequency: 50              # Prune unused methods every M rounds
+  transfer_ratio: 0.5                # Transfer to bottom 50%
+  min_usage_threshold: 5             # Min uses before pruning eligible
+  min_success_rate: 0.3              # Min success rate to keep
+
+agents:
+  analyst:
+    id: "A1"
+    inventory:
+      analyst.features:
+        - talib_stack
+        - stl
+      analyst.trends:
+        - gaussian_hmm
+        - kalman_filter
+
+  researcher:
+    id: "R1"
+    inventory:
+      researcher.forecasting:
+        - arima_x
+        - tft
+      researcher.uncertainty:
+        - bootstrap_ensemble
+        - quantile_regression
+      researcher.calibration:
+        - temperature_scaling
+        - conformal_icp
+
+  trader:
+    id: "T1"
+    use_llm: true
+    llm_model: "gpt-4o-mini"
+    log_thoughts: true
+    inventory:
+      trader.styles:
+        - aggressive_market
+        - passive_laddered_limit
+
+  risk:
+    id: "M1"
+    inventory:
+      risk.checks:
+        - var_safe_band
+        - leverage_position_limits
+        - liquidation_safety
+        - margin_call_risk
+
+  evaluator:
+    id: "E1"

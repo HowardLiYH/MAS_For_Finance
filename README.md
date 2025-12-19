@@ -1,349 +1,273 @@
-# Multi-agent LLM Financial Trading Model on BTC Perpetual
+# Multi-Agent LLM Financial Trading Model
 
-## ⚙️ Basic Setup
+## 🚀 Multi-Asset Crypto Trading with Cross-Market Intelligence
 
+A modular, LLM-powered trading system that trades **5 cryptocurrencies** (BTC, ETH, SOL, DOGE, XRP) with cross-asset market context features.
+
+| Coin | Symbol | Description |
+|------|--------|-------------|
+| Bitcoin | BTC | Primary market benchmark |
+| Ethereum | ETH | Smart contract platform |
+| Solana | SOL | High-performance L1 |
+| Dogecoin | DOGE | Meme coin / retail sentiment |
+| Ripple | XRP | Payment-focused crypto |
+
+---
+
+## ⚙️ Quick Start
+
+### Multi-Asset Mode (Recommended)
 ```bash
+# Setup
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
-python -m trading_agents.cli --symbol BTCUSD.PERP --interval 4h
+
+# Copy Bybit data to data/bybit/
+cp /path/to/Bybit_CSV_Data/*.csv data/bybit/
+
+# Run multi-asset trading
+python -m trading_agents.cli multi --config configs/multi_asset.yaml
 ```
 
-## ✨ Related Repositories
+### Single-Asset Mode
+```bash
+# Trade single coin
+python -m trading_agents.cli run --config configs/single/btc.yaml
+python -m trading_agents.cli run --config configs/single/eth.yaml
+```
 
-* TradingAgents Enhanced Chinese Edition: [TradingAgents-CN](https://github.com/your-repo/TradingAgents-CN)
-* TradingAgents Original by Tauric Research: [TradingAgents](https://github.com/tauric-research/TradingAgents)
+---
+
+## 📊 Cross-Asset Market Context
+
+When running in multi-asset mode, the system generates 8 cross-asset signals:
+
+| Feature | Description | Trading Signal |
+|---------|-------------|----------------|
+| `btc_dominance` | BTC market cap proxy | High = risk-off |
+| `altcoin_momentum` | Altcoin returns | Positive = risk-on |
+| `eth_btc_ratio` | ETH/BTC strength | Rising = ETH outperforming |
+| `cross_oi_delta` | Total OI change | Rising = conviction |
+| `aggregate_funding` | Weighted funding | High = crowded long |
+| `risk_on_off` | Altcoin beta | High = risk-on |
+| `market_volatility` | Annualized vol | High = uncertainty |
+| `cross_correlation` | Pairwise correlation | High = macro-driven |
+
+---
+
+## 📁 Project Structure
+
+```
+MAS_Final_With_Agents/
+├── trading_agents/              # Core multi-agent trading system
+│   ├── agents/                  # Agent implementations
+│   │   ├── analyst.py           # Feature & trend extraction
+│   │   ├── researcher.py        # Forecasting & uncertainty
+│   │   ├── trader.py            # LLM-powered order generation
+│   │   ├── risk.py              # Risk validation
+│   │   └── evaluator.py         # Performance scoring
+│   ├── inventory/               # Pluggable strategy methods
+│   │   ├── analyst/             # TALib, STL, HMM, Kalman
+│   │   ├── researcher/          # ARIMAX, TFT, Bootstrap
+│   │   ├── trader/              # Market, Limit execution
+│   │   └── risk/                # VaR, Leverage, Margin checks
+│   ├── config/                  # Configuration management
+│   ├── optimization/            # Continual learning
+│   ├── services/                # LLM & metrics services
+│   ├── workflow.py              # WorkflowEngine
+│   └── cli.py                   # Command-line interface
+│
+├── data_pipeline/               # Data fetching & processing
+│   └── pipeline/
+│       ├── multi_asset.py       # 5-coin Bybit loader
+│       ├── cross_features.py    # Cross-asset signals
+│       └── data_pipeline.py     # Unified entry point
+│
+├── configs/                     # YAML configurations
+│   ├── multi_asset.yaml         # 5-coin trading (RECOMMENDED)
+│   ├── default.yaml             # Single-asset default
+│   └── single/                  # Per-coin configs
+│       ├── btc.yaml
+│       ├── eth.yaml
+│       ├── sol.yaml
+│       ├── doge.yaml
+│       └── xrp.yaml
+│
+└── data/                        # Market data
+    ├── bybit/                   # Bybit CSV source files
+    ├── multi_asset/             # Multi-asset outputs
+    └── single/                  # Single-asset outputs
+```
+
+---
+
+## 🤖 Agent Descriptions
+
+### Analyst Agent
+Processes time-series price data to extract:
+- **Features**: TALib technical indicators, STL decomposition
+- **Trends**: Gaussian HMM regime detection, Kalman filter
+
+### Researcher Agent
+Generates trading signals with uncertainty:
+- **Forecasting**: ARIMAX, Temporal Fusion Transformer
+- **Uncertainty**: Bootstrap ensemble, Quantile regression
+- **Calibration**: Temperature scaling, Conformal prediction
+
+### Trader Agent
+LLM-powered order generation:
+- Interprets research signals + news narratives
+- Selects execution style (aggressive market / passive limit)
+- Outputs: position size, leverage, TP/SL, liquidation price
+
+### Risk Manager Agent
+Validates orders with three verdicts:
+- **pass**: Order within all limits
+- **soft_fail**: Minor violation, can adjust
+- **hard_fail**: Critical violation, abort
+
+### Evaluator Agent
+Tracks performance metrics:
+- Sharpe ratio, PnL, Hit rate
+- Max drawdown, Calibration ECE
+
+---
+
+## 🔄 Workflow
+
+```
+┌─────────────┐
+│ Price Data  │ ← 5 coins from Bybit
+│ (BTC,ETH,..)│
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐     ┌──────────────┐
+│   Analyst   │────▶│  Researcher  │
+│ (per coin)  │     │ (per coin)   │
+└─────────────┘     └──────┬───────┘
+                           │
+       ┌─────────────┐     │
+       │Market Context│◀───┘
+       │(cross-asset) │
+       └──────┬───────┘
+              │
+              ▼
+       ┌─────────────┐
+       │   Trader    │◀──── News Data
+       │ (per coin)  │
+       └──────┬──────┘
+              │
+              ▼
+       ┌─────────────┐
+       │ Risk Manager│
+       └──────┬──────┘
+              │
+              ▼
+       ┌─────────────┐
+       │  Evaluator  │
+       └─────────────┘
+```
+
+---
 
 ## 📔 Change History
 
 * (2025.07.03) First Meeting
 * (2025.08.28) Project Proposal and Workflow First Draft
 * (2025.09.18) Completed Micro & Macro News and Price Data Fetch
-* (2025.10.17) Created config-driven, raw multi-agent pipeline, and raw inventory instantiation
+* (2025.10.17) Created config-driven, raw multi-agent pipeline
 * (2025.12.19) **Major Architecture Refactoring v0.2.0**
-   * **Structural Reorganization:**
-      * `strategies/` → `inventory/` with agent-specific subdirectories (analyst/, researcher/, trader/, risk/)
-      * `models/types.py` → `models.py` (flattened single-file module)
-      * `orchestrator/graph.py` → `workflow.py` with `WorkflowEngine` class (removed global state)
-      * `learning/` → `optimization/` with `KnowledgeTransfer` and `InventoryPruner`
-      * `tools/` → `utils/` (standard Python convention)
-      * `config.py` + `compose.py` → `config/` module with `schemas.py` and `loader.py`
-   * **New Features Implemented:**
-      * Plugin-based inventory system with `@register` decorator
-      * Lazy-loading package imports to improve startup time
-      * Complete Risk Manager with `hard_fail` / `soft_fail` / `pass` verdicts
-      * Liquidation price calculation in Trader Agent
-      * Performance tracking with Sharpe, PnL, HitRate, MaxDD, CalibECE metrics
-      * Knowledge transfer mechanism (top agents teach bottom performers every K rounds)
-      * Inventory pruning (remove rarely-used methods every M rounds)
-   * **Agent Implementations Completed:**
-      * Analyst: TALibStack, STLDecomposition, GaussianHMM, KalmanFilter
-      * Researcher: ARIMAX, TFT, BootstrapEnsemble, QuantileRegression, TemperatureScaling, ConformalICP
-      * Trader: AggressiveMarket, PassiveLadderedLimit with LLM integration
-      * Risk: VaRSafeBand, LeveragePositionLimits, LiquidationSafety, MarginCallRisk, GlobalVaRBreach
-      * Evaluator: PerformanceTracker with comprehensive metrics
-
-* **Next (NeurIPS 2026 Submission Target):**
-   * **Experimental Validation:**
-      * Run backtesting on 2-year BTC perpetual data (4h intervals)
-      * Validate on Aug 2024, Test on Sep-Dec 2024
-      * Generate ablation studies: with/without continual learning, with/without risk manager
-   * **Benchmark Comparisons:**
-      * Compare against [Alpha Arena](https://alpha-arena.com) baselines
-      * Evaluate different LLMs (GPT-4, DeepSeek, Claude) on Trader decision quality
-      * Measure market interpretability and reasoning quality
-   * **Paper Writing:**
-      * Problem formulation: Multi-agent orchestration for algorithmic trading
-      * Contributions: Continual learning, inventory pruning, risk-aware execution
-      * Experiments: Sharpe ratio, max drawdown, hit rate, calibration ECE
-      * Analysis: Ablations, LLM comparison, knowledge transfer effectiveness
-   * **Technical Improvements:**
-      * Add Admin Agent for automated reporting and monitoring
-      * Integrate real-time paper trading for live validation
-      * Implement cross-asset generalization (ETH, SOL)
+   * Structural reorganization (inventory/, config/, optimization/)
+   * Plugin-based inventory system with `@register` decorator
+   * Complete Risk Manager with hard_fail / soft_fail / pass
+   * Performance tracking with Sharpe, PnL, HitRate, MaxDD, CalibECE
+   * Knowledge transfer and inventory pruning
+* (2025.12.19) **Multi-Asset Data Pipeline v0.3.0**
+   * Added support for 5 coins: BTC, ETH, SOL, DOGE, XRP
+   * Bybit perpetual futures data with derivative features
+   * Cross-asset market context (8 signals)
+   * Per-coin and multi-asset configuration files
+   * Updated project structure for multi-coin trading
 
 ---
 
-# 🤖 Summary of the Multi-agent LLM Financial Trading Model on BTC Perpetual with SJTU
+## 🎯 Next (NeurIPS 2026 Target)
 
-## Key Concepts
+### Experimental Validation
+- Run backtesting on 2-year data (4h intervals) for all 5 coins
+- Validate: Aug 2024, Test: Sep-Dec 2024
+- Ablation studies: with/without cross-asset features, with/without risk manager
 
-* Multi-agent Systems
-* Large Language Models
-* Continual Learning
-* Uncertainty Quantification
-* Risk-aware Decision Making
-* Explainable AI
-* Cross-modal Data Fusion
-* Agent-based Orchestration
-* Feedback-driven Optimization
-* Structured Knowledge Representation
+### Benchmark Comparisons
+- Compare against [Alpha Arena](https://alpha-arena.com) baselines
+- Evaluate LLMs: GPT-4, DeepSeek, Claude on decision quality
+- Measure cross-asset vs single-asset performance
 
----
+### Paper Contributions
+- Multi-agent orchestration for algorithmic trading
+- Cross-asset market context features
+- Continual learning and inventory pruning
+- Risk-aware execution with LLM reasoning
 
-## High-level Summary
-
-Our model incorporates five types of agents to replicate the workflow pipeline of a hedge fund:
-**Analysts, Researchers, Traders, Risk Managers, and Evaluators.**
-
-* The system ingests two distinct streams of information:
-   1. **Text-based news data** (collected via LLM prompting with strict date control to prevent leakage)
-   2. **Time-series BTC price data** (4-hour intervals)
-* Agents perform trading activities and continually improve through feedback.
-* Each agent type has specialized inventories (methods/prompts) to complete tasks.
-* After each trading round (when an order is closed), the **Evaluator Agent** measures performance against fixed metrics.
-* After every K iterations, top performers in each category transfer knowledge to peers.
-* Price data and news data are deliberately treated separately:
-   * **Analyst & Researcher Agents** → preprocess & analyze time-series inputs.
-   * **Trader Agents** → interpret news narratives + market micro-structure.
+### Technical Improvements
+- Add Admin Agent for automated reporting
+- Real-time paper trading validation
+- Extend to more assets (AVAX, LINK, etc.)
 
 ---
 
-## Overall Workflow
+## ✨ Related Repositories
 
-```
-┌─────────────┐
-│ Price Data  │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐     ┌──────────────┐
-│   Analyst   │────▶│  Researcher  │
-└─────────────┘     └──────┬───────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │   Trader    │◀────┐
-                    └──────┬──────┘     │
-                           │            │
-                           ▼            │
-                    ┌─────────────┐     │
-                    │ Risk Manager│     │
-                    └──────┬──────┘     │
-                           │            │
-                           ▼            │
-                    ┌─────────────┐     │
-                    │  Evaluator  │─────┘
-                    └─────────────┘
-```
-
-Part (1): **Agents Simulating a Hedge Fund Pipeline**
-
-* Each step draws methods from the inventory.
-
----
-
-## Inventory Reference
-
-* **(F):** Agents built in first stage development
-* **(S):** Agents built in second stage development
-* All agents call **one shared LLM**
-
----
-
-# Agent Descriptions
-
-## Analyst Agent (F)
-
-**Description:**
-Processes time-series price data to output:
-
-* Constructed Features (DataFrame)
-* Constructed Trend Information (DataFrame)
-
-**Processing Steps:**
-
-* A-A Data Alignment
-* A-B Feature Construction (ᴹ)
-* A-C Trend Detection (ᴹ)
-
----
-
-## Researcher Agent (F)
-
-**Description:**
-Consumes Analyst outputs (features + trends) and produces:
-
-* JSON research summary with trading recommendations
-
-**Processing Steps:**
-
-* R-A Forecasting (ᴹ)
-* R-B Uncertainty & Risk Quantification (ᴹ)
-* R-C Probability Calibration (ᴹ)
-* R-D Signal Packaging
-
-**Output JSON Keys:**
-`Meta, Market_State, Forecast, Signals, Risk, Recommendation, Scenarios, Explainability, Constraints, Confidence, Post_trade_evaluation_keys`
-
-### 📖 Example JSON Structures
-
-**Research Summary Example:**
-
-```json
-{
-  "Meta": "...",
-  "Market_State": "...",
-  "Forecast": "...",
-  "Signals": "...",
-  "Risk": "...",
-  "Recommendation": "...",
-  "Scenarios": "...",
-  "Explainability": "...",
-  "Constraints": "...",
-  "Confidence": "...",
-  "Post_trade_evaluation_keys": "..."
-}
-```
-
----
-
-## Trader Agent (F)
-
-**Description:**
-
-* Consumes Researcher outputs + fresh News Data
-* Selects trading style from inventory (optimized over time)
-* Executes orders considering both market conditions and LLM signals
-
-**Notes:**
-
-* Focused on a single instrument/market/product (BTC perpetuals)
-* Style convergence expected but must avoid bias from extreme conditions
-* Traders scored differently (longer iteration cycles recommended)
-
-**Processing Steps:**
-
-* T-A Obtain Execution Style (ᴹ)
-* T-B Execute Order
-
-**Output (JSON):**
-
-* Order ID
-* Current Price
-* Limit/Market Order
-* Position Size
-* Direction (Long/Short)
-* Take Profit / Stop Loss Prices
-* Closed Price (N/A if open)
-* Leverage Size
-* Liquidation Price
-* Execution Expired Time (EET)
-
-**Order State Machine:**
-
-```
-Open → Filled → Closed (via TP/SL/EET)
-```
-
----
-
-## Risk Manager Agent (S)
-
-**Description:**
-Ensures Trader execution is safe:
-
-* **hard_fail** → abort order
-* **soft_fail** → regenerate order (back to T-B or T-A)
-* **pass** → order executed & logged
-
-**Processing Steps:**
-
-* M-A Risk Analysis (ᴹ)
-* M-B Output Log
-
-**Outputs:**
-
-* JSON risk analysis logs
-* Pass / Soft Fail / Hard Fail decisions
-
-**Decision Logic:**
-
-* **Pass:** Order within VaR / size / margin limits
-* **Soft Fail:** Violates minor rule (e.g., too high leverage) but can be adjusted
-* **Hard Fail:** Breaches critical rule (e.g., margin call imminent) → discarded
-
----
-
-## Continual Learning & Optimization
-
-### Part (2) Continual Learning from the Best
-
-* After K rounds, top agents in each category **teach peers**.
-* Trader Agents may follow a distinct iteration cycle.
-
-### Part (3) Inventory Pruning
-
-* Rank methods by frequency of use.
-* Remove less-used methods over time (careful to preserve scenario-specific methods).
-
-### Part (n) Future Extensions
-
-* Add Admin agent to generate reports, monitor performance, and deliver evaluations.
-
----
-
-## Project Structure
-
-```
-MAS_Final_With_Agents/
-├── trading_agents/           # Main multi-agent trading system (v0.2.0)
-│   ├── agents/               # Agent implementations
-│   │   ├── analyst.py        # Feature construction & trend detection
-│   │   ├── researcher.py     # Forecasting, uncertainty, calibration
-│   │   ├── trader.py         # LLM-powered order generation
-│   │   ├── risk.py           # Risk validation (hard_fail/soft_fail/pass)
-│   │   └── evaluator.py      # Performance scoring
-│   ├── inventory/            # Pluggable methods (registry pattern)
-│   │   ├── analyst/          # TALibStack, STL, GaussianHMM, KalmanFilter
-│   │   ├── researcher/       # ARIMAX, TFT, Bootstrap, QuantileReg, Calibration
-│   │   ├── trader/           # AggressiveMarket, PassiveLadderedLimit
-│   │   └── risk/             # VaR, Leverage, Liquidation, Margin checks
-│   ├── config/               # Configuration management
-│   │   ├── schemas.py        # AppConfig, DataConfig, NewsConfig, LearningConfig
-│   │   └── loader.py         # YAML loading, agent building
-│   ├── optimization/         # Continual learning
-│   │   ├── knowledge_transfer.py  # Top-to-bottom knowledge sharing
-│   │   └── inventory_pruning.py   # Remove rarely-used methods
-│   ├── services/             # External services
-│   │   ├── llm.py            # LLM integration for Trader
-│   │   └── metrics.py        # PerformanceTracker (Sharpe, PnL, etc.)
-│   ├── utils/                # Utilities
-│   │   ├── news_filter.py    # 3-stage news filtering
-│   │   └── thought_logger.py # LLM thought process logging
-│   ├── backtesting/          # Backtesting framework
-│   ├── workflow.py           # WorkflowEngine (main orchestration)
-│   ├── models.py             # Data models (ResearchSummary, ExecutionSummary, etc.)
-│   └── cli.py                # Command-line interface
-├── data_pipeline/            # Market data fetching and processing
-│   ├── pipeline/             # Core data pipeline
-│   └── news/                 # News fetching (SerpAPI, LLM prompts)
-├── configs/                  # YAML configuration files
-│   ├── default.yaml          # Full config (730 days)
-│   └── btc4h.yaml            # Short config (30 days, offline data)
-├── data/                     # Data storage (prices, news)
-└── README.md                 # This file
-```
+* TradingAgents Enhanced Chinese Edition: [TradingAgents-CN](https://github.com/your-repo/TradingAgents-CN)
+* TradingAgents Original by Tauric Research: [TradingAgents](https://github.com/tauric-research/TradingAgents)
 
 ---
 
 ## Configuration
 
-Configuration is managed via YAML files in the `configs/` directory:
+### Multi-Asset (configs/multi_asset.yaml)
+```yaml
+data:
+  multi_asset: true
+  symbols: [BTC, ETH, SOL, DOGE, XRP]
+  bybit_csv_dir: "data/bybit"
+  add_cross_features: true
+```
 
-* `configs/default.yaml` — Full configuration (730 days of data, all inventory methods)
-* `configs/btc4h.yaml` — Short-term config (30 days, offline data for fast iteration)
+### Single-Asset (configs/single/btc.yaml)
+```yaml
+data:
+  multi_asset: false
+  offline_prices_csv: "data/bybit/Bybit_BTC.csv"
+```
 
-Example usage:
+---
+
+## Data Setup
+
+### Option 1: Copy Bybit CSVs
 ```bash
-# Run with default config
-python -m trading_agents.cli run --symbol BTCUSD.PERP --interval 4h
+cp /path/to/Bybit_CSV_Data/*.csv data/bybit/
+```
 
-# Run with custom config
-python -m trading_agents.cli run --symbol BTCUSD.PERP --interval 4h --config configs/btc4h.yaml
+### Option 2: Symlink
+```bash
+ln -s /path/to/Bybit_CSV_Data data/bybit
+```
+
+### Expected Files
+```
+data/bybit/
+├── Bybit_BTC.csv
+├── Bybit_ETH.csv
+├── Bybit_SOL.csv
+├── Bybit_DOGE.csv
+└── Bybit_XRP.csv
 ```
 
 ---
 
 ## License & Attribution
 
-This implementation borrows **design patterns** (orchestrator signature, multi-LLM adapter, news filter idea) from the **TradingAgents** and **TradingAgents-CN** projects (Apache-2.0). See their repositories for details; attribution retained in code comments and this README.
+This implementation borrows design patterns from **TradingAgents** and **TradingAgents-CN** (Apache-2.0). See their repositories for details.
