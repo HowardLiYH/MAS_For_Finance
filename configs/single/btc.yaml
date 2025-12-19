@@ -1,0 +1,73 @@
+# =============================================================================
+# BTC Single-Asset Configuration
+# =============================================================================
+# For backtesting BTC only (without cross-asset features)
+# =============================================================================
+
+symbol: "BTCUSD.PERP"
+timeframe: "4h"
+
+data:
+  exchange_id: "bybit"
+  timeframe: "4h"
+  max_days: 730
+  out_dir: "data/single/btc"
+  
+  # Single-asset mode
+  multi_asset: false
+  offline_prices_csv: "data/bybit/Bybit_BTC.csv"
+
+news:
+  use_llm_news: true
+  news_query: "bitcoin OR BTC"
+  search_provider: "serpapi"
+  llm_model: "gpt-4o-mini"
+  max_news_per_stream: 10
+  max_search_results_per_stream: 50
+  require_published_signal: true
+  max_lookback_days: 14
+  default_lookback_days: 7
+
+learning:
+  knowledge_transfer_frequency: 10
+  trader_transfer_frequency: 20
+  pruning_frequency: 50
+
+agents:
+  analyst:
+    id: "A1"
+    inventory:
+      analyst.features:
+        - talib_stack
+        - stl
+      analyst.trends:
+        - gaussian_hmm
+        - kalman_filter
+
+  researcher:
+    id: "R1"
+    inventory:
+      researcher.forecasting:
+        - arima_x
+      researcher.uncertainty:
+        - bootstrap_ensemble
+      researcher.calibration:
+        - temperature_scaling
+
+  trader:
+    id: "T1"
+    use_llm: true
+    inventory:
+      trader.styles:
+        - aggressive_market
+
+  risk:
+    id: "M1"
+    inventory:
+      risk.checks:
+        - var_safe_band
+        - leverage_position_limits
+
+  evaluator:
+    id: "E1"
+
