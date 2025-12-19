@@ -27,6 +27,7 @@
 \definecolor{codegray}{RGB}{128,128,128}
 \definecolor{codegreen}{RGB}{0,128,0}
 \definecolor{backcolor}{RGB}{245,245,245}
+\definecolor{gold}{RGB}{255,215,0}
 
 % Code listing style
 \lstset{
@@ -788,7 +789,7 @@ Method B looks bad initially but has better multi-step return.
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}[
-    step/.style={rectangle, draw, minimum width=1.5cm, minimum height=0.8cm, align=center},
+    timestep/.style={rectangle, draw, minimum width=1.5cm, minimum height=0.8cm, align=center},
     arrow/.style={->, thick, >=stealth}
 ]
 
@@ -803,17 +804,17 @@ Method B looks bad initially but has better multi-step return.
 \node at (10.5, -0.4) {Total $G$};
 
 % Method A (immediate gains)
-\node[step, fill=green!30] (a0) at (1.5, 1.5) {+1\%};
-\node[step, fill=green!20] (a1) at (4.5, 1.5) {+0.5\%};
-\node[step, fill=green!20] (a2) at (7.5, 1.5) {+0.5\%};
-\node[step, fill=blue!20] (ag) at (10.5, 1.5) {\textbf{1.86\%}};
+\node[timestep, fill=green!30] (a0) at (1.5, 1.5) {+1\%};
+\node[timestep, fill=green!20] (a1) at (4.5, 1.5) {+0.5\%};
+\node[timestep, fill=green!20] (a2) at (7.5, 1.5) {+0.5\%};
+\node[timestep, fill=blue!20] (ag) at (10.5, 1.5) {\textbf{1.86\%}};
 \node[font=\bfseries] at (-1, 1.5) {Method A};
 
 % Method B (delayed gains)
-\node[step, fill=red!30] (b0) at (1.5, 3) {-0.5\%};
-\node[step, fill=green!40] (b1) at (4.5, 3) {+3\%};
-\node[step, fill=green!30] (b2) at (7.5, 3) {+2\%};
-\node[step, fill=green!40] (bg) at (10.5, 3) {\textbf{3.82\%}};
+\node[timestep, fill=red!30] (b0) at (1.5, 3) {-0.5\%};
+\node[timestep, fill=green!40] (b1) at (4.5, 3) {+3\%};
+\node[timestep, fill=green!30] (b2) at (7.5, 3) {+2\%};
+\node[timestep, fill=green!40] (bg) at (10.5, 3) {\textbf{3.82\%}};
 \node[font=\bfseries] at (-1, 3) {Method B};
 
 % Discount factors
@@ -1126,20 +1127,20 @@ trading_agents/
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}[
-    step/.style={rectangle, draw, rounded corners, fill=blue!20, minimum width=3.5cm, minimum height=1cm, align=center},
+    loopstep/.style={rectangle, draw, rounded corners, fill=blue!20, minimum width=3.5cm, minimum height=1cm, align=center},
     decision/.style={diamond, draw, fill=yellow!30, minimum width=2cm, minimum height=1.5cm, align=center, font=\footnotesize},
     arrow/.style={->, thick, >=stealth}
 ]
 
 % Main loop
-\node[step] (select) at (0, 0) {1. SELECT\\Methods via\\Thompson Sampling};
-\node[step] (pipeline) at (5, 0) {2. SAMPLE\\25 pipeline\\combinations};
-\node[step] (evaluate) at (10, 0) {3. EVALUATE\\Run pipelines\\Measure PnL};
+\node[loopstep] (select) at (0, 0) {1. SELECT\\Methods via\\Thompson Sampling};
+\node[loopstep] (pipeline) at (5, 0) {2. SAMPLE\\25 pipeline\\combinations};
+\node[loopstep] (evaluate) at (10, 0) {3. EVALUATE\\Run pipelines\\Measure PnL};
 
-\node[step] (update) at (10, -3) {4. UPDATE\\Beta params +\\Preferences};
+\node[loopstep] (update) at (10, -3) {4. UPDATE\\Beta params +\\Preferences};
 \node[decision] (check) at (5, -3) {iter \% 10\\== 0?};
-\node[step] (transfer) at (5, -5.5) {5. TRANSFER\\Best $\rightarrow$ Others};
-\node[step] (diversity) at (0, -3) {6. DIVERSITY\\Check \& boost\\if needed};
+\node[loopstep] (transfer) at (5, -5.5) {5. TRANSFER\\Best $\rightarrow$ Others};
+\node[loopstep] (diversity) at (0, -3) {6. DIVERSITY\\Check \& boost\\if needed};
 
 % Arrows
 \draw[arrow] (select) -- (pipeline);
