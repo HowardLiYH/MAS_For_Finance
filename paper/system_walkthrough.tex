@@ -18,7 +18,9 @@
 \usepackage{algorithmic}
 \usepackage{tcolorbox}
 \usepackage{tikz}
-\usetikzlibrary{shapes,arrows,positioning,fit,backgrounds}
+\usetikzlibrary{shapes,arrows,positioning,fit,backgrounds,calc,decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
 
 % Custom colors
 \definecolor{codeblue}{RGB}{0,102,204}
@@ -92,6 +94,64 @@ Static configurations & Adapts to market conditions \\
 \end{tabular}
 \end{center}
 
+\vspace{1em}
+
+% Visual: Traditional vs PopAgent
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    box/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.8cm, align=center},
+    method/.style={rectangle, draw, fill=blue!20, rounded corners, minimum width=1.8cm, minimum height=0.5cm, font=\footnotesize},
+    inv/.style={rectangle, draw, fill=green!20, rounded corners, minimum width=3cm, minimum height=2.5cm, align=center},
+    agent/.style={circle, draw, fill=orange!30, minimum size=0.8cm, font=\footnotesize},
+    arrow/.style={->, thick, >=stealth}
+]
+
+% Traditional side
+\node[font=\bfseries] at (-4, 3) {Traditional: Fixed Methods};
+
+\node[box, fill=red!20] (t1) at (-5.5, 2) {Technical\\Analyst};
+\node[box, fill=red!20] (t2) at (-5.5, 1) {Statistical\\Analyst};
+\node[box, fill=red!20] (t3) at (-5.5, 0) {ML\\Analyst};
+
+\node[method] (m1) at (-2.5, 2) {RSI, MACD};
+\node[method] (m2) at (-2.5, 1) {Autocorr};
+\node[method] (m3) at (-2.5, 0) {HMM};
+
+\draw[arrow] (t1) -- node[above, font=\tiny] {always} (m1);
+\draw[arrow] (t2) -- node[above, font=\tiny] {always} (m2);
+\draw[arrow] (t3) -- node[above, font=\tiny] {always} (m3);
+
+% PopAgent side
+\node[font=\bfseries] at (4, 3) {PopAgent: Learned Selection};
+
+\node[inv] (inventory) at (2.5, 1) {\textbf{Inventory}\\RSI, MACD,\\HMM, Kalman,\\Wavelet, STL,\\... (15 total)};
+
+\node[agent] (a1) at (5.5, 2) {A1};
+\node[agent] (a2) at (5.5, 1) {A2};
+\node[agent] (a3) at (5.5, 0) {A3};
+
+\draw[arrow, color=green!60!black] (inventory) -- (a1);
+\draw[arrow, color=green!60!black] (inventory) -- (a2);
+\draw[arrow, color=green!60!black] (inventory) -- (a3);
+
+\node[method, fill=green!30] at (7.5, 2) {RSI, HMM};
+\node[method, fill=green!30] at (7.5, 1) {MACD, STL};
+\node[method, fill=green!30] at (7.5, 0) {Kalman, BB};
+
+\draw[arrow] (a1) -- (7, 2);
+\draw[arrow] (a2) -- (7, 1);
+\draw[arrow] (a3) -- (7, 0);
+
+% Labels
+\node[font=\small, color=red!60!black] at (-4, -0.8) {Cannot adapt};
+\node[font=\small, color=green!60!black] at (4, -0.8) {Learns what works};
+
+\end{tikzpicture}
+\caption{Traditional fixed-method agents vs. PopAgent's adaptive method selection}
+\label{fig:innovation}
+\end{figure}
+
 %==============================================================================
 \section{System Overview}
 %==============================================================================
@@ -111,24 +171,92 @@ The system consists of four main layers:
 
 Each trading iteration follows this flow:
 
-\begin{center}
-\begin{tikzpicture}[node distance=2cm, auto,
-    block/.style={rectangle, draw, fill=blue!20, text width=3cm, text centered, rounded corners, minimum height=1cm},
-    arrow/.style={->, thick}]
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.8cm, auto,
+    block/.style={rectangle, draw, fill=blue!20, text width=2.8cm, text centered, rounded corners, minimum height=1.2cm},
+    data/.style={rectangle, draw, fill=yellow!20, text width=2cm, text centered, rounded corners, minimum height=0.8cm, font=\footnotesize},
+    arrow/.style={->, thick, >=stealth},
+    label/.style={font=\footnotesize, color=gray}]
     
-    \node[block] (analyst) {Analyst\\(15 methods)};
-    \node[block, right of=analyst, node distance=3.5cm] (researcher) {Researcher\\(12 methods)};
-    \node[block, right of=researcher, node distance=3.5cm] (trader) {Trader\\(10 methods)};
-    \node[block, right of=trader, node distance=3.5cm] (risk) {Risk Manager\\(10 methods)};
+    % Data inputs
+    \node[data] (price) at (-2, 2) {Price Data\\OHLCV};
+    \node[data] (news) at (-2, -1) {News\\Sentiment};
     
-    \draw[arrow] (analyst) -- node[above] {features} (researcher);
-    \draw[arrow] (researcher) -- node[above] {forecast} (trader);
-    \draw[arrow] (trader) -- node[above] {order} (risk);
+    % Pipeline
+    \node[block, fill=purple!20] (analyst) at (1, 1) {\textbf{Analyst}\\15 methods\\selects 3};
+    \node[block, fill=blue!20] (researcher) at (4.5, 1) {\textbf{Researcher}\\12 methods\\selects 3};
+    \node[block, fill=green!20] (trader) at (8, 1) {\textbf{Trader}\\10 methods\\selects 3};
+    \node[block, fill=red!20] (risk) at (11.5, 1) {\textbf{Risk Mgr}\\10 methods\\selects 3};
+    
+    % Output
+    \node[data, fill=green!30] (order) at (14, 1) {Final\\Order};
+    
+    % Arrows with labels
+    \draw[arrow] (price) -- (analyst);
+    \draw[arrow] (analyst) -- node[above, label] {features} (researcher);
+    \draw[arrow] (researcher) -- node[above, label] {forecast} (trader);
+    \draw[arrow] (news) -| (trader);
+    \draw[arrow] (trader) -- node[above, label] {proposal} (risk);
+    \draw[arrow] (risk) -- (order);
+    
+    % Inventory indicators
+    \node[font=\tiny, color=purple!60!black] at (1, -0.3) {RSI, MACD, HMM...};
+    \node[font=\tiny, color=blue!60!black] at (4.5, -0.3) {ARIMA, LSTM...};
+    \node[font=\tiny, color=green!60!black] at (8, -0.3) {Kelly, TWAP...};
+    \node[font=\tiny, color=red!60!black] at (11.5, -0.3) {VaR, MaxDD...};
     
 \end{tikzpicture}
-\end{center}
+\caption{The four-stage trading pipeline. Each agent selects 3 methods from its inventory.}
+\label{fig:pipeline}
+\end{figure}
 
 \textbf{Key insight}: Each role has an \textit{inventory} of methods (10-15), but each agent only \textit{selects 3} at a time. This creates selection pressure.
+
+% Selection pressure visualization
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    method/.style={rectangle, draw, fill=gray!20, minimum width=0.6cm, minimum height=0.4cm, font=\tiny},
+    selected/.style={rectangle, draw, fill=green!40, minimum width=0.6cm, minimum height=0.4cm, font=\tiny},
+]
+
+% Inventory grid
+\foreach \i in {0,...,14} {
+    \pgfmathsetmacro{\x}{mod(\i, 5) * 0.8}
+    \pgfmathsetmacro{\y}{-floor(\i / 5) * 0.6}
+    \ifnum\i=2
+        \node[selected] at (\x, \y) {};
+    \else\ifnum\i=7
+        \node[selected] at (\x, \y) {};
+    \else\ifnum\i=11
+        \node[selected] at (\x, \y) {};
+    \else
+        \node[method] at (\x, \y) {};
+    \fi\fi\fi
+}
+
+\node[font=\small] at (1.6, 0.7) {\textbf{15 methods available}};
+\node[font=\small, color=green!60!black] at (1.6, -2.3) {Agent selects 3 (green)};
+
+% Arrow
+\draw[->, thick] (4.5, -0.9) -- (6, -0.9);
+\node at (5.25, -0.5) {\footnotesize learns};
+
+% Result
+\node[selected] at (7, -0.6) {};
+\node[selected] at (7.8, -0.6) {};
+\node[selected] at (8.6, -0.6) {};
+
+\node[font=\small] at (7.8, -1.3) {Used in pipeline};
+
+% Math
+\node at (11, -0.9) {$\binom{15}{3} = 455$ combinations};
+
+\end{tikzpicture}
+\caption{Selection pressure: 15 methods, only 3 selected. Creates 455 possible combinations to explore.}
+\label{fig:selection_pressure}
+\end{figure}
 
 %==============================================================================
 \section{The Four Agent Roles}
@@ -285,7 +413,7 @@ Our approach:
 class MethodSelector:
     inventory = [RSI, MACD, Bollinger, HMM, Kalman, ...]  # 15 options
     preferences = {RSI: 0.8, MACD: 0.3, HMM: 1.2, ...}    # Learned
-    
+
     def select_methods(self, context):
         # Sample from Beta distributions (Thompson Sampling)
         scores = {m: sample_beta(alpha[m], beta[m]) for m in inventory}
@@ -366,6 +494,52 @@ Kalman & 2 & 2 & 0.50 & 0.68 \\
 
 In this sample, we'd select \texttt{[RSI, HMM, Kalman]} (top-3 samples), even though MACD has more data, because the samples favored the others.
 
+% Thompson Sampling Beta distribution visualization
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=12cm, height=6cm,
+    domain=0:1,
+    samples=100,
+    xlabel={Success Probability $\theta$},
+    ylabel={Density},
+    legend pos=north west,
+    legend style={font=\footnotesize},
+    title={\textbf{Beta Distributions for Different Methods}},
+    grid=major,
+    ymin=0, ymax=5
+]
+
+% Beta(15, 5) - RSI - high confidence, high success
+\addplot[thick, color=blue] {(x^14)*(1-x)^4 * 2432902008176640000 / (87178291200 * 24 * 1307674368000)};
+\addlegendentry{RSI: Beta(15,5) - High confidence}
+
+% Beta(3, 2) - HMM - low confidence
+\addplot[thick, color=red, dashed] {(x^2)*(1-x)^1 * 12};
+\addlegendentry{HMM: Beta(3,2) - Uncertain}
+
+% Beta(2, 2) - Kalman - uniform-ish
+\addplot[thick, color=green, dotted] {(x^1)*(1-x)^1 * 6};
+\addlegendentry{Kalman: Beta(2,2) - Very uncertain}
+
+\end{axis}
+
+% Annotation
+\node[font=\footnotesize, align=left] at (10.5, 4) {
+    \textbf{Key insight:}\\
+    Wider distribution =\\
+    more uncertainty =\\
+    higher chance of\\
+    sampling a high value\\
+    (exploration)
+};
+
+\end{tikzpicture}
+\caption{Thompson Sampling uses Beta distributions. Uncertain methods (wide distributions) may sample high values, encouraging exploration.}
+\label{fig:thompson}
+\end{figure}
+
 \subsection{Enhancement 2: Contextual Baselines}
 
 \begin{keybox}[Contextual Baseline Intuition]
@@ -410,6 +584,44 @@ Bear market & +2\% & -0.5\% & +2.5\% (exceptional!) \\
 
 The same reward gets different credit based on context.
 
+% Contextual Baseline visualization
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    bar/.style={rectangle, draw, minimum width=1.5cm},
+    label/.style={font=\footnotesize}
+]
+
+% Bull market scenario
+\node[font=\bfseries] at (0, 3.5) {Bull Market};
+\draw[fill=green!30] (0, 0) rectangle (1.5, 2.5);
+\node[label] at (0.75, 2.7) {Baseline: 2.5\%};
+\draw[fill=blue!50] (0, 0) rectangle (1.5, 2);
+\node[label] at (0.75, 1) {Reward: 2\%};
+\draw[<->, thick, red] (1.7, 2) -- (1.7, 2.5);
+\node[label, red] at (2.5, 2.25) {-0.5\%};
+\node[label, align=center] at (0.75, -0.5) {Below average\\(penalized)};
+
+% Bear market scenario
+\node[font=\bfseries] at (7, 3.5) {Bear Market};
+\draw[fill=red!30] (6.25, 0) rectangle (7.75, 0.5);
+\node[label] at (7, 0.9) {Baseline: -0.5\%};
+\draw[fill=blue!50] (6.25, 0) rectangle (7.75, 2);
+\node[label] at (7, 1.5) {Reward: 2\%};
+\draw[<->, thick, green!60!black] (8, 0.5) -- (8, 2);
+\node[label, green!60!black] at (9, 1.25) {+2.5\%};
+\node[label, align=center] at (7, -0.5) {Exceptional\\(rewarded!)};
+
+% Middle explanation
+\node[font=\small, align=center] at (3.5, 1.5) {Same 2\% reward,\\different credit};
+\draw[->, thick] (2.2, 1.5) -- (3, 1.5);
+\draw[->, thick] (4, 1.5) -- (5, 1.5);
+
+\end{tikzpicture}
+\caption{Contextual baselines: The same 2\% return gets different credit depending on market conditions.}
+\label{fig:contextual}
+\end{figure}
+
 \subsection{Enhancement 3: Multi-Step Returns}
 
 \begin{keybox}[Multi-Step Return Intuition]
@@ -438,6 +650,64 @@ Method B & -0.5\% & +3\% & +2\% & $-0.5 + 2.7 + 1.62 = 3.82\%$ \\
 
 Method B looks bad initially but has better multi-step return.
 
+% Multi-step return visualization
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    step/.style={rectangle, draw, minimum width=1.5cm, minimum height=0.8cm, align=center},
+    arrow/.style={->, thick, >=stealth}
+]
+
+% Timeline
+\draw[->, thick] (0, 0) -- (12, 0);
+\node at (12.3, 0) {Time};
+
+% Time labels
+\node at (1.5, -0.4) {$t$};
+\node at (4.5, -0.4) {$t+1$};
+\node at (7.5, -0.4) {$t+2$};
+\node at (10.5, -0.4) {Total $G$};
+
+% Method A (immediate gains)
+\node[step, fill=green!30] (a0) at (1.5, 1.5) {+1\%};
+\node[step, fill=green!20] (a1) at (4.5, 1.5) {+0.5\%};
+\node[step, fill=green!20] (a2) at (7.5, 1.5) {+0.5\%};
+\node[step, fill=blue!20] (ag) at (10.5, 1.5) {\textbf{1.86\%}};
+\node[font=\bfseries] at (-1, 1.5) {Method A};
+
+% Method B (delayed gains)
+\node[step, fill=red!30] (b0) at (1.5, 3) {-0.5\%};
+\node[step, fill=green!40] (b1) at (4.5, 3) {+3\%};
+\node[step, fill=green!30] (b2) at (7.5, 3) {+2\%};
+\node[step, fill=green!40] (bg) at (10.5, 3) {\textbf{3.82\%}};
+\node[font=\bfseries] at (-1, 3) {Method B};
+
+% Discount factors
+\node[font=\footnotesize, color=gray] at (1.5, 0.7) {$\times 1$};
+\node[font=\footnotesize, color=gray] at (4.5, 0.7) {$\times 0.9$};
+\node[font=\footnotesize, color=gray] at (7.5, 0.7) {$\times 0.81$};
+
+% Arrows to total
+\draw[arrow, dashed, gray] (a0) -- (ag);
+\draw[arrow, dashed, gray] (a1) -- (ag);
+\draw[arrow, dashed, gray] (a2) -- (ag);
+
+\draw[arrow, dashed, gray] (b0) -- (bg);
+\draw[arrow, dashed, gray] (b1) -- (bg);
+\draw[arrow, dashed, gray] (b2) -- (bg);
+
+% Winner indicator
+\draw[thick, green!60!black] (10.5, 3.5) -- (10.5, 3.7) -- (11.2, 3.7);
+\node[font=\footnotesize, green!60!black] at (11.7, 3.7) {Winner!};
+
+% Formula
+\node[font=\small] at (6, -1.2) {$G = R_0 + \gamma R_1 + \gamma^2 R_2 = R_0 + 0.9 R_1 + 0.81 R_2$};
+
+\end{tikzpicture}
+\caption{Multi-step returns with $\gamma = 0.9$. Method B has worse immediate reward but better total return.}
+\label{fig:multistep}
+\end{figure}
+
 %==============================================================================
 \section{Population-Based Learning}
 %==============================================================================
@@ -458,6 +728,70 @@ Risk Manager & 5 agents & Method selections, preferences \\
 \hline
 \end{tabular}
 \end{center}
+
+% Population structure visualization
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    agent/.style={circle, draw, minimum size=0.7cm, font=\tiny},
+    best/.style={circle, draw, fill=gold, minimum size=0.7cm, font=\tiny},
+    pop/.style={rectangle, draw, rounded corners, minimum width=4cm, minimum height=1.5cm},
+    arrow/.style={->, thick, >=stealth, dashed}
+]
+
+% Analyst population
+\node[pop, fill=purple!10] (apop) at (0, 0) {};
+\node[font=\small\bfseries] at (0, 1) {Analysts};
+\node[best] (a1) at (-1.2, 0) {A1};
+\node[agent, fill=purple!20] (a2) at (-0.6, 0) {A2};
+\node[agent, fill=purple!20] (a3) at (0, 0) {A3};
+\node[agent, fill=purple!20] (a4) at (0.6, 0) {A4};
+\node[agent, fill=purple!20] (a5) at (1.2, 0) {A5};
+\node[font=\tiny, color=gold] at (-1.2, -0.6) {best};
+
+% Researcher population
+\node[pop, fill=blue!10] (rpop) at (5, 0) {};
+\node[font=\small\bfseries] at (5, 1) {Researchers};
+\node[agent, fill=blue!20] (r1) at (3.8, 0) {R1};
+\node[agent, fill=blue!20] (r2) at (4.4, 0) {R2};
+\node[best] (r3) at (5, 0) {R3};
+\node[agent, fill=blue!20] (r4) at (5.6, 0) {R4};
+\node[agent, fill=blue!20] (r5) at (6.2, 0) {R5};
+\node[font=\tiny, color=gold] at (5, -0.6) {best};
+
+% Trader population
+\node[pop, fill=green!10] (tpop) at (0, -3) {};
+\node[font=\small\bfseries] at (0, -2) {Traders};
+\node[agent, fill=green!20] (t1) at (-1.2, -3) {T1};
+\node[agent, fill=green!20] (t2) at (-0.6, -3) {T2};
+\node[agent, fill=green!20] (t3) at (0, -3) {T3};
+\node[best] (t4) at (0.6, -3) {T4};
+\node[agent, fill=green!20] (t5) at (1.2, -3) {T5};
+\node[font=\tiny, color=gold] at (0.6, -3.6) {best};
+
+% Risk population
+\node[pop, fill=red!10] (kpop) at (5, -3) {};
+\node[font=\small\bfseries] at (5, -2) {Risk Managers};
+\node[agent, fill=red!20] (k1) at (3.8, -3) {K1};
+\node[best] (k2) at (4.4, -3) {K2};
+\node[agent, fill=red!20] (k3) at (5, -3) {K3};
+\node[agent, fill=red!20] (k4) at (5.6, -3) {K4};
+\node[agent, fill=red!20] (k5) at (6.2, -3) {K5};
+\node[font=\tiny, color=gold] at (4.4, -3.6) {best};
+
+% Knowledge transfer arrows
+\draw[arrow, color=gold] (a1) to[bend left=30] (a2);
+\draw[arrow, color=gold] (a1) to[bend left=20] (a3);
+\draw[arrow, color=gold] (a1) to[bend left=10] (a4);
+\draw[arrow, color=gold] (a1) to[bend right=10] (a5);
+
+% Pipeline example
+\node[font=\footnotesize, align=center] at (8.5, -1.5) {Pipeline example:\\(A1, R3, T4, K2)\\$\rightarrow$ Evaluate\\$\rightarrow$ Update scores};
+
+\end{tikzpicture}
+\caption{Population structure: 4 roles $\times$ 5 agents = 20 agents. Gold = best performer, transfers knowledge to others.}
+\label{fig:population}
+\end{figure}
 
 \subsection{Pipeline Combinations}
 
@@ -500,9 +834,9 @@ To prevent population collapse (all agents converging to same methods):
     \begin{equation}
         D = \frac{1}{\binom{N}{2}} \sum_{i < j} \left(1 - \frac{|S^i \cap S^j|}{|S^i \cup S^j|}\right)
     \end{equation}
-    
+
     \item \textbf{If diversity $< 0.3$}: Boost exploration rate for non-best agents
-    
+
     \item \textbf{Result}: Population maintains variety while still learning from best
 \end{enumerate}
 
@@ -652,8 +986,75 @@ trading_agents/
 \end{questionbox}
 
 %==============================================================================
+\section{Complete Learning Loop}
+%==============================================================================
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    step/.style={rectangle, draw, rounded corners, fill=blue!20, minimum width=3.5cm, minimum height=1cm, align=center},
+    decision/.style={diamond, draw, fill=yellow!30, minimum width=2cm, minimum height=1.5cm, align=center, font=\footnotesize},
+    arrow/.style={->, thick, >=stealth}
+]
+
+% Main loop
+\node[step] (select) at (0, 0) {1. SELECT\\Methods via\\Thompson Sampling};
+\node[step] (pipeline) at (5, 0) {2. SAMPLE\\25 pipeline\\combinations};
+\node[step] (evaluate) at (10, 0) {3. EVALUATE\\Run pipelines\\Measure PnL};
+
+\node[step] (update) at (10, -3) {4. UPDATE\\Beta params +\\Preferences};
+\node[decision] (check) at (5, -3) {iter \% 10\\== 0?};
+\node[step] (transfer) at (5, -5.5) {5. TRANSFER\\Best $\rightarrow$ Others};
+\node[step] (diversity) at (0, -3) {6. DIVERSITY\\Check \& boost\\if needed};
+
+% Arrows
+\draw[arrow] (select) -- (pipeline);
+\draw[arrow] (pipeline) -- (evaluate);
+\draw[arrow] (evaluate) -- (update);
+\draw[arrow] (update) -- (check);
+\draw[arrow] (check) -- node[right, font=\footnotesize] {Yes} (transfer);
+\draw[arrow] (check) -- node[above, font=\footnotesize] {No} (diversity);
+\draw[arrow] (transfer) -- (diversity);
+\draw[arrow] (diversity) -- (select);
+
+% Iteration label
+\draw[dashed, gray, thick] (-2, 1.5) rectangle (12, -6.5);
+\node[font=\bfseries, gray] at (5, 1.2) {One Learning Iteration};
+
+% Side annotations
+\node[font=\tiny, align=left] at (-2.5, 0) {Sample from\\Beta($\alpha$, $\beta$)};
+\node[font=\tiny, align=left] at (5, 1) {$5^4$ possible};
+\node[font=\tiny, align=left] at (12.5, 0) {PnL = reward};
+\node[font=\tiny, align=left] at (12.5, -3) {Contextual\\baseline};
+
+\end{tikzpicture}
+\caption{Complete learning loop for one iteration. Steps repeat, with knowledge transfer every 10 iterations.}
+\label{fig:loop}
+\end{figure}
+
+%==============================================================================
 \section{Key Takeaways}
 %==============================================================================
+
+% Visual summary
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    box/.style={rectangle, draw, rounded corners, fill=#1, minimum width=4cm, minimum height=1.2cm, align=center},
+]
+
+\node[box=purple!20] at (0, 0) {\textbf{Meta-Learning}\\Learn WHAT to use};
+\node[box=blue!20] at (5.5, 0) {\textbf{Selection Pressure}\\15 methods, select 3};
+\node[box=green!20] at (11, 0) {\textbf{Lightweight RL}\\Thompson + Contextual};
+
+\node[box=orange!20] at (0, -2) {\textbf{Population}\\20 agents explore};
+\node[box=red!20] at (5.5, -2) {\textbf{Interpretable}\\Clear preferences};
+\node[box=gray!20] at (11, -2) {\textbf{Sample Efficient}\\100$\times$ fewer samples};
+
+\end{tikzpicture}
+\caption{Six key properties of PopAgent.}
+\label{fig:takeaways}
+\end{figure}
 
 \begin{enumerate}
     \item \textbf{Method Selection as Meta-Learning}: Agents learn WHAT to use, not just parameters
@@ -680,5 +1081,132 @@ trading_agents/
     \item \textbf{Contextual Bandits}: Li et al. (2010), ``A Contextual-Bandit Approach to Personalized News Article Recommendation''
 \end{itemize}
 
-\end{document}
+%==============================================================================
+\appendix
+\section{Full System Architecture Diagram}
+%==============================================================================
 
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.85, transform shape,
+    layer/.style={rectangle, draw, rounded corners, minimum width=14cm, minimum height=2.5cm, fill=#1},
+    component/.style={rectangle, draw, rounded corners, fill=white, minimum width=2cm, minimum height=0.8cm, font=\footnotesize, align=center},
+    arrow/.style={->, thick, >=stealth}
+]
+
+% Layer 1: Data Input
+\node[layer=yellow!20] (data) at (0, 8) {};
+\node[font=\bfseries] at (-5.5, 8.8) {DATA LAYER};
+\node[component] at (-4, 8) {Bybit CSVs\\5 assets};
+\node[component] at (-1, 8) {Cross-Asset\\Features};
+\node[component] at (2, 8) {Bocha\\News API};
+\node[component] at (5, 8) {News\\Enrichment};
+
+% Layer 2: Population
+\node[layer=purple!20] (pop) at (0, 5) {};
+\node[font=\bfseries] at (-5.5, 5.8) {POPULATION LAYER};
+\node[component, fill=purple!30] at (-4.5, 5) {Analyst\\Pop (5)};
+\node[component, fill=blue!30] at (-1.5, 5) {Researcher\\Pop (5)};
+\node[component, fill=green!30] at (1.5, 5) {Trader\\Pop (5)};
+\node[component, fill=red!30] at (4.5, 5) {Risk\\Pop (5)};
+
+% Layer 3: Learning
+\node[layer=blue!20] (learn) at (0, 2) {};
+\node[font=\bfseries] at (-5.5, 2.8) {LEARNING LAYER};
+\node[component] at (-4, 2) {Thompson\\Sampling};
+\node[component] at (-1, 2) {Contextual\\Baselines};
+\node[component] at (2, 2) {Multi-Step\\Returns};
+\node[component] at (5, 2) {Knowledge\\Transfer};
+
+% Layer 4: Execution
+\node[layer=green!20] (exec) at (0, -1) {};
+\node[font=\bfseries] at (-5.5, -0.2) {EXECUTION LAYER};
+\node[component] at (-3, -1) {Order\\Manager};
+\node[component] at (0, -1) {Bybit\\Testnet};
+\node[component] at (3, -1) {Position\\Tracker};
+
+% Arrows between layers
+\draw[arrow] (0, 6.8) -- (0, 6.3);
+\draw[arrow] (0, 3.8) -- (0, 3.3);
+\draw[arrow] (0, 0.8) -- (0, 0.3);
+
+% Side labels
+\node[font=\tiny, rotate=90] at (7.5, 8) {Input};
+\node[font=\tiny, rotate=90] at (7.5, 5) {20 Agents};
+\node[font=\tiny, rotate=90] at (7.5, 2) {RL Updates};
+\node[font=\tiny, rotate=90] at (7.5, -1) {Paper Trade};
+
+\end{tikzpicture}
+\caption{Complete system architecture showing the four main layers.}
+\label{fig:architecture}
+\end{figure}
+
+%==============================================================================
+\section{Method Inventory Reference}
+%==============================================================================
+
+\begin{table}[h]
+\centering
+\footnotesize
+\caption{Complete method inventories for all four agent roles.}
+\begin{tabular}{|l|l|p{8cm}|}
+\hline
+\textbf{Role} & \textbf{Category} & \textbf{Methods} \\
+\hline
+\multirow{4}{*}{Analyst (15)} 
+& Technical & RSI, MACD, BollingerBands, ADX, Stochastic \\
+& Statistical & Autocorrelation, VolatilityClustering, MeanReversion, Cointegration \\
+& Decomposition & STL, WaveletTransform, FourierAnalysis \\
+& ML & HMM\_Regime, KalmanFilter, IsolationForest \\
+\hline
+\multirow{3}{*}{Researcher (12)}
+& Statistical & ARIMA, ExponentialSmoothing, VAR, GARCH \\
+& ML & RandomForest, GradientBoosting, LSTM, TemporalFusion \\
+& Uncertainty & Bootstrap, QuantileRegression, Bayesian, ConformalPrediction \\
+\hline
+\multirow{3}{*}{Trader (10)}
+& Execution & AggressiveMarket, PassiveLimit, TWAP, VWAP \\
+& Sizing & KellyCriterion, FixedFractional, VolatilityScaled \\
+& Entry & MomentumEntry, ContrarianEntry, BreakoutEntry \\
+\hline
+\multirow{4}{*}{Risk (10)}
+& Position & MaxLeverage, MaxPositionSize, ConcentrationLimit \\
+& Loss & MaxDrawdown, DailyStopLoss, TrailingStop \\
+& Metrics & VaR, ExpectedShortfall \\
+& Dynamic & VolatilityAdjusted, RegimeAware \\
+\hline
+\end{tabular}
+\label{tab:full_inventory}
+\end{table}
+
+%==============================================================================
+\section{Notation Summary}
+%==============================================================================
+
+\begin{table}[h]
+\centering
+\caption{Mathematical notation used throughout this document.}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Symbol} & \textbf{Meaning} \\
+\hline
+$\mathcal{M}$ & Method inventory (set of available methods) \\
+$|\mathcal{M}|$ & Inventory size (e.g., 15 for Analyst) \\
+$S$ & Selected methods (subset of $\mathcal{M}$, typically $|S|=3$) \\
+$k$ & Number of methods to select \\
+$\alpha_m, \beta_m$ & Beta distribution parameters for method $m$ \\
+$\theta_m$ & Sampled success probability for method $m$ \\
+$\pi$ & Preference vector over methods \\
+$\bar{R}_c$ & Baseline reward for context $c$ \\
+$A$ & Advantage (reward minus baseline) \\
+$\gamma$ & Discount factor for multi-step returns (default 0.9) \\
+$G_t$ & Multi-step return starting at time $t$ \\
+$\tau$ & Transfer rate for knowledge sharing (default 0.1) \\
+$D$ & Selection diversity (Jaccard distance) \\
+$N$ & Population size (default 5 agents per role) \\
+\hline
+\end{tabular}
+\label{tab:notation}
+\end{table}
+
+\end{document}
