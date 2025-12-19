@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import json
 import re
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from openai import OpenAI
 
 
@@ -23,13 +23,84 @@ def _create_openai_client() -> OpenAI:
         return OpenAI(api_key=key)
 
 
+def format_news_digest(news_digest: Optional[Dict[str, Any]]) -> str:
+    """
+    Format news digest for LLM prompt.
+
+    Args:
+        news_digest: NewsDigest.to_dict() output or None
+
+    Returns:
+        Formatted string for prompt
+    """
+    if not news_digest:
+        return "No news digest available."
+
+    lines = [
+        f"NEWS DIGEST ({news_digest.get('total_items', 0)} articles)",
+        f"├── Overall Sentiment: {news_digest.get('sentiment_score', 0):+.2f} ({news_digest.get('overall_sentiment', 'neutral').upper()})",
+        f"├── Trend: {news_digest.get('sentiment_trend', 'stable')}",
+        f"├── Source Quality: {news_digest.get('tier1_percentage', 0):.0%} tier-1 sources",
+        "│",
+    ]
+
+    # Dominant narratives
+    narratives = news_digest.get("dominant_narratives", [])
+    if narratives:
+        lines.append("├── DOMINANT NARRATIVES:")
+        for i, narrative in enumerate(narratives[:3], 1):
+            lines.append(f"│   {i}. {narrative}")
+        lines.append("│")
+
+    # Key events
+    events = news_digest.get("key_events", [])
+    if events:
+        lines.append("├── KEY EVENTS:")
+        for event in events[:5]:
+            emoji = "🟢" if event.get("sentiment") == "bullish" else "🔴" if event.get("sentiment") == "bearish" else "⚪"
+            lines.append(f"│   {emoji} [{event.get('event_type', 'general').upper()}] {event.get('headline', '')[:80]}")
+        lines.append("│")
+
+    # Asset sentiment
+    asset_sentiment = news_digest.get("asset_sentiment", {})
+    if asset_sentiment:
+        lines.append("├── ASSET SENTIMENT:")
+        for asset, score in sorted(asset_sentiment.items(), key=lambda x: x[1], reverse=True):
+            indicator = "↑" if score > 0.1 else "↓" if score < -0.1 else "→"
+            lines.append(f"│   {asset}: {score:+.2f} {indicator}")
+
+    lines.append("└──")
+
+    return "\n".join(lines)
+
+
+def format_news_items_legacy(news_items: List[Dict[str, Any]]) -> str:
+    """
+    Format raw news items for LLM prompt (legacy format).
+
+    Args:
+        news_items: List of raw news item dicts
+
+    Returns:
+        Formatted string for prompt
+    """
+    if not news_items:
+        return "No relevant news items available."
+
+    return "\n".join([
+        f"- [{item.get('source', 'unknown')}] {item.get('title', '')}: {item.get('summary', '')[:200]}"
+        for item in news_items[:20]
+    ])
+
+
 def generate_trading_proposal(
     execution_style: str,
     research_summary: Dict[str, Any],
-    news_items: list[Dict[str, Any]],
+    news_items: List[Dict[str, Any]],
     price_data_summary: Dict[str, Any],
     current_price: float,
     model: str = "gpt-4o-mini",
+    news_digest: Optional[Dict[str, Any]] = None,
 ) -> tuple[Dict[str, Any], str]:
     """
     Generate trading proposal using LLM.
@@ -37,22 +108,20 @@ def generate_trading_proposal(
     Args:
         execution_style: Trading style (e.g., "Aggressive_Market")
         research_summary: Research output from Researcher agent
-        news_items: List of news items
+        news_items: List of news items (legacy format)
         price_data_summary: Current price data summary
         current_price: Current market price
         model: LLM model to use
+        news_digest: Optional NewsDigest dict (enhanced format)
 
     Returns:
         tuple: (parsed_proposal_dict, thought_process_text)
     """
-    # Format news items
-    if news_items:
-        news_text = "\n".join([
-            f"- [{item.get('source', 'unknown')}] {item.get('title', '')}: {item.get('summary', '')[:200]}"
-            for item in news_items[:20]
-        ])
+    # Use enhanced news digest if available, otherwise legacy format
+    if news_digest:
+        news_text = format_news_digest(news_digest)
     else:
-        news_text = "No relevant news items available."
+        news_text = format_news_items_legacy(news_items)
 
     # Format price data
     price_summary = f"""
@@ -81,10 +150,9 @@ CURRENT MARKET DATA:
 RESEARCH SUMMARY:
 {research_text}
 
-RELEVANT NEWS:
 {news_text}
 
-Provide a trading proposal in JSON format:
+Based on the above information, provide a trading proposal in JSON format:
 {{
   "direction": "LONG" or "SHORT",
   "position_size": float (0.0 to 1.0),
@@ -94,16 +162,23 @@ Provide a trading proposal in JSON format:
   "take_profit": float,
   "stop_loss": float,
   "execution_expired_time": "ISO8601 datetime" or null,
-  "reasoning": "Brief explanation"
+  "reasoning": "Brief explanation including news impact assessment"
 }}
 
-CONSTRAINTS:
+TRADING RULES:
 - Position size proportional to confidence (max 0.5)
 - Conservative leverage (1-5x recommended)
 - Realistic take profit (1-5% for 4h timeframe)
 - Tight stop loss (0.5-2% for 4h timeframe)
 - LONG: take_profit > entry_price > stop_loss
 - SHORT: stop_loss > entry_price > take_profit
+
+NEWS INTEGRATION RULES:
+- Bullish news sentiment (>0.3) supports LONG positions
+- Bearish news sentiment (<-0.3) supports SHORT positions
+- High-impact events (ETF flows, regulation) should influence position sizing
+- Low source quality (<50% tier-1) = reduce confidence
+- If news contradicts technicals, reduce position size
 
 Return ONLY valid JSON.
 """
@@ -136,13 +211,26 @@ Return ONLY valid JSON.
 
     except Exception as e:
         print(f"⚠️ LLM call failed: {e}, using fallback")
-        return _fallback_proposal(research_summary, current_price), f"LLM failed: {e}"
+        return _fallback_proposal(research_summary, current_price, news_digest), f"LLM failed: {e}"
 
 
-def _fallback_proposal(research_summary: Dict[str, Any], current_price: float) -> Dict[str, Any]:
+def _fallback_proposal(
+    research_summary: Dict[str, Any],
+    current_price: float,
+    news_digest: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Fallback rule-based proposal."""
     direction = "LONG" if research_summary.get("recommendation") == "BUY" else "SHORT"
     confidence = research_summary.get("confidence", 0.5)
+
+    # Adjust confidence based on news sentiment
+    if news_digest:
+        news_sentiment = news_digest.get("sentiment_score", 0)
+        if (direction == "LONG" and news_sentiment > 0) or (direction == "SHORT" and news_sentiment < 0):
+            confidence = min(1.0, confidence + abs(news_sentiment) * 0.1)
+        elif (direction == "LONG" and news_sentiment < -0.3) or (direction == "SHORT" and news_sentiment > 0.3):
+            confidence = max(0.1, confidence - 0.2)
+
     position_size = 0.2 if confidence < 0.6 else 0.5
     leverage = 3.0 if confidence >= 0.6 else 2.0
 
@@ -166,5 +254,5 @@ def _fallback_proposal(research_summary: Dict[str, Any], current_price: float) -
         "take_profit": take_profit,
         "stop_loss": stop_loss,
         "execution_expired_time": None,
-        "reasoning": "Fallback rule-based logic"
+        "reasoning": f"Fallback rule-based logic (confidence: {confidence:.2f})"
     }
