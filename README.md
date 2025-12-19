@@ -36,6 +36,28 @@ python -m trading_agents.cli run --config configs/single/btc.yaml
 python -m trading_agents.cli run --config configs/single/eth.yaml
 ```
 
+### Paper Trading (Bybit Testnet)
+```bash
+# Install paper trading dependencies
+pip install -e ".[paper-trading]"
+
+# Set Bybit Testnet API credentials
+export BYBIT_TESTNET_KEY="your-api-key"
+export BYBIT_TESTNET_SECRET="your-api-secret"
+
+# Run paper trading
+python -m trading_agents.cli paper --symbols BTC ETH SOL
+```
+
+### Admin Reports
+```bash
+# Generate performance report
+python -m trading_agents.cli report --days 30
+
+# Check admin status
+python -m trading_agents.cli status
+```
+
 ---
 
 ## 📊 Cross-Asset Market Context
@@ -73,7 +95,16 @@ MAS_Final_With_Agents/
 │   │   └── risk/                # VaR, Leverage, Margin checks
 │   ├── config/                  # Configuration management
 │   ├── optimization/            # Continual learning
-│   ├── services/                # LLM & metrics services
+│   ├── services/                # Services layer
+│   │   ├── llm.py               # LLM proposal generation
+│   │   ├── metrics.py           # Performance tracking
+│   │   ├── events.py            # Event bus system
+│   │   ├── alerts.py            # Alert rules engine
+│   │   ├── notifications.py     # Slack/console/file notifications
+│   │   ├── reports.py           # Report generation
+│   │   ├── bybit_client.py      # Bybit Testnet API client
+│   │   ├── order_manager.py     # Order lifecycle management
+│   │   └── positions.py         # Position tracking
 │   ├── workflow.py              # WorkflowEngine
 │   └── cli.py                   # Command-line interface
 │
@@ -189,6 +220,14 @@ Tracks performance metrics:
    * Cross-asset market context (8 signals)
    * Per-coin and multi-asset configuration files
    * Updated project structure for multi-coin trading
+* (2025.12.19) **Admin Agent & Paper Trading v0.4.0**
+   * Admin Agent with automated reporting and alerting
+   * Event bus system for system-wide communication
+   * Alert rules: max drawdown, daily loss, risk breaches, Sharpe warnings
+   * Scheduled reports: daily summary, weekly summary, performance reports
+   * Bybit Testnet integration for paper trading validation
+   * Order manager with position tracking
+   * Slack/console/file notification channels
 
 ---
 
@@ -211,9 +250,12 @@ Tracks performance metrics:
 - Risk-aware execution with LLM reasoning
 
 ### Technical Improvements
-- Add Admin Agent for automated reporting
-- Real-time paper trading validation
-- Extend to more assets (AVAX, LINK, etc.)
+- ~~Add Admin Agent for automated reporting~~ ✅ Done
+- ~~Real-time paper trading validation~~ ✅ Done
+- ~~Extend to more assets (AVAX, LINK, etc.)~~ ✅ Done (5 coins)
+- WebSocket real-time feeds for live trading
+- Email notifications for critical alerts
+- Backtesting engine improvements
 
 ---
 

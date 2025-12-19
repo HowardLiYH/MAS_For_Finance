@@ -5,6 +5,7 @@ from .researcher import ResearcherAgent
 from .trader import TraderAgent
 from .risk import RiskAgent
 from .evaluator import EvaluatorAgent
+from .admin import AdminAgent, AdminConfig
 
 __all__ = [
     "BaseAgent",
@@ -13,4 +14,6 @@ __all__ = [
     "TraderAgent",
     "RiskAgent",
     "EvaluatorAgent",
+    "AdminAgent",
+    "AdminConfig",
 ]

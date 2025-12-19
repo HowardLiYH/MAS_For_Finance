@@ -51,6 +51,34 @@ class LearningConfig:
 
 
 @dataclass
+class AdminConfigSchema:
+    """Configuration for Admin Agent."""
+    enabled: bool = True
+    max_drawdown_pct: float = 10.0
+    daily_loss_limit_pct: float = 5.0
+    risk_breach_threshold: int = 3
+    daily_summary_enabled: bool = True
+    daily_summary_hour: int = 0  # UTC hour
+    weekly_summary_enabled: bool = True
+    weekly_summary_day: str = "sunday"
+    slack_webhook: Optional[str] = None
+    email: Optional[str] = None
+    log_dir: str = "logs/admin"
+
+
+@dataclass
+class PaperTradingConfig:
+    """Configuration for paper trading."""
+    enabled: bool = False
+    exchange: str = "bybit_testnet"
+    api_key: Optional[str] = None  # Can use env var BYBIT_TESTNET_KEY
+    api_secret: Optional[str] = None  # Can use env var BYBIT_TESTNET_SECRET
+    max_position_usd: float = 10000.0
+    default_leverage: int = 5
+    symbols: List[str] = field(default_factory=lambda: ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+
+
+@dataclass
 class AppConfig:
     """Main application configuration."""
     symbol: str = "BTCUSD.PERP"
@@ -58,6 +86,8 @@ class AppConfig:
     data: DataConfig = field(default_factory=DataConfig)
     news: NewsConfig = field(default_factory=NewsConfig)
     learning: LearningConfig = field(default_factory=LearningConfig)
+    admin: AdminConfigSchema = field(default_factory=AdminConfigSchema)
+    paper_trading: PaperTradingConfig = field(default_factory=PaperTradingConfig)
 
     @property
     def is_multi_asset(self) -> bool:
@@ -72,6 +102,16 @@ class AppConfig:
         # Extract symbol from single-asset format (e.g., "BTCUSD.PERP" -> "BTC")
         base = self.symbol.upper().replace("USD", "").replace(".PERP", "").replace("USDT", "")
         return [base]
+
+    @property
+    def admin_max_drawdown_pct(self) -> float:
+        """Get admin max drawdown threshold."""
+        return self.admin.max_drawdown_pct
+
+    @property
+    def admin_daily_loss_pct(self) -> float:
+        """Get admin daily loss limit."""
+        return self.admin.daily_loss_limit_pct
 
 
 @dataclass

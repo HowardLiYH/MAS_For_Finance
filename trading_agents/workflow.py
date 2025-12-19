@@ -29,6 +29,7 @@ from .config.loader import build_agents_from_yaml
 from .models import ResearchSummary, ExecutionSummary, RiskReview
 from .inventory import load_all_methods
 from .services.metrics import PerformanceTracker
+from .services.events import EventBus, TradingEvent, EventTypes
 from .optimization import KnowledgeTransfer, InventoryPruner
 from .utils.news_filter import filter_news_3_stage
 
@@ -38,6 +39,16 @@ from .agents.researcher import ResearcherAgent
 from .agents.trader import TraderAgent
 from .agents.risk import RiskAgent
 from .agents.evaluator import EvaluatorAgent
+from .agents.admin import AdminAgent, AdminConfig
+
+# Paper trading imports (optional)
+try:
+    from .services.bybit_client import BybitTestnetClient
+    from .services.order_manager import OrderManager
+    from .services.positions import PositionTracker
+    PAPER_TRADING_AVAILABLE = True
+except ImportError:
+    PAPER_TRADING_AVAILABLE = False
 
 # Data pipeline import
 try:
@@ -91,6 +102,9 @@ class WorkflowEngine:
         self,
         config: Optional[AppConfig] = None,
         config_path: Optional[Path] = None,
+        enable_paper_trading: bool = False,
+        bybit_api_key: Optional[str] = None,
+        bybit_api_secret: Optional[str] = None,
     ):
         """
         Initialize the workflow engine.
@@ -98,6 +112,9 @@ class WorkflowEngine:
         Args:
             config: Application configuration
             config_path: Path to YAML config file (used if config not provided)
+            enable_paper_trading: Enable Bybit testnet paper trading
+            bybit_api_key: Bybit testnet API key (or use env var)
+            bybit_api_secret: Bybit testnet API secret (or use env var)
         """
         # Load configuration
         if config:
@@ -127,6 +144,42 @@ class WorkflowEngine:
         # Ensure evaluator has tracker
         if self.agents.get("evaluator"):
             self.agents["evaluator"].tracker = self.tracker
+
+        # Initialize event bus for system-wide communication
+        self.event_bus = EventBus()
+
+        # Initialize Admin Agent
+        admin_config = AdminConfig(
+            max_drawdown_pct=getattr(self.config, 'admin_max_drawdown_pct', 10.0),
+            daily_loss_limit_pct=getattr(self.config, 'admin_daily_loss_pct', 5.0),
+            slack_webhook=os.getenv("SLACK_WEBHOOK"),
+        )
+        self.admin = AdminAgent(
+            id="ADMIN",
+            tracker=self.tracker,
+            event_bus=self.event_bus,
+            config=admin_config,
+        )
+        self.agents["admin"] = self.admin
+
+        # Initialize paper trading if enabled
+        self.paper_trading_enabled = False
+        self.bybit_client: Optional[BybitTestnetClient] = None
+        self.order_manager: Optional[OrderManager] = None
+        self.position_tracker: Optional[PositionTracker] = None
+
+        if enable_paper_trading and PAPER_TRADING_AVAILABLE:
+            api_key = bybit_api_key or os.getenv("BYBIT_TESTNET_KEY")
+            api_secret = bybit_api_secret or os.getenv("BYBIT_TESTNET_SECRET")
+
+            if api_key and api_secret:
+                self.bybit_client = BybitTestnetClient(api_key, api_secret)
+                self.order_manager = OrderManager(self.bybit_client, self.event_bus)
+                self.position_tracker = PositionTracker(self.bybit_client, self.event_bus)
+                self.paper_trading_enabled = True
+                print("[WORKFLOW] Paper trading enabled (Bybit Testnet)")
+            else:
+                print("[WORKFLOW] Paper trading disabled: missing API credentials")
 
         # State
         self.iteration = 0
@@ -232,8 +285,31 @@ class WorkflowEngine:
         # Trader
         execution = trader.run(research, filtered_news, price_df)
 
+        # Emit order created event
+        self.event_bus.publish(TradingEvent.now(
+            event_type=EventTypes.ORDER_CREATED,
+            payload={"order_id": execution.order_id, "direction": execution.direction},
+            source="workflow",
+        ))
+
         # Risk check
         risk_review = risk.run(execution, price_df)
+
+        # Emit risk event
+        if risk_review.verdict == "hard_fail":
+            self.event_bus.publish(TradingEvent.now(
+                event_type=EventTypes.RISK_HARD_FAIL,
+                payload={"reason": risk_review.notes, "order_id": execution.order_id},
+                severity="critical",
+                source="risk_agent",
+            ))
+        elif risk_review.verdict == "soft_fail":
+            self.event_bus.publish(TradingEvent.now(
+                event_type=EventTypes.RISK_SOFT_FAIL,
+                payload={"reason": risk_review.notes, "order_id": execution.order_id},
+                severity="warning",
+                source="risk_agent",
+            ))
 
         # Handle risk review
         final_execution, final_review = self._handle_risk_review(
@@ -246,12 +322,30 @@ class WorkflowEngine:
         if final_review.approved:
             self._record_trade(evaluator, final_execution, research)
 
+            # Emit order submitted/approved event
+            self.event_bus.publish(TradingEvent.now(
+                event_type=EventTypes.ORDER_SUBMITTED,
+                payload={"order_id": final_execution.order_id, "approved": True},
+                source="workflow",
+            ))
+
         # Score
         scores = evaluator.score(
             {"exec": final_execution.__dict__, "risk": final_review.__dict__},
             agent_id=trader.id,
             agent_type="trader",
         )
+
+        # Emit iteration end event
+        self.event_bus.publish(TradingEvent.now(
+            event_type=EventTypes.ITERATION_END,
+            payload={
+                "iteration": self.iteration,
+                "approved": final_review.approved,
+                "direction": final_execution.direction,
+            },
+            source="workflow",
+        ))
 
         print(f"\n{'='*60}")
         print(f"[WORKFLOW] Iteration {self.iteration} END")
@@ -647,3 +741,55 @@ def run_multi_asset(
     )
 
     return engine.run_multi_asset_iteration(input_cfg)
+
+
+def run_paper_trading(
+    config_path: Optional[Path] = None,
+    symbols: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Run a multi-asset iteration with paper trading enabled.
+
+    Requires BYBIT_TESTNET_KEY and BYBIT_TESTNET_SECRET env vars.
+
+    Args:
+        config_path: Path to config file
+        symbols: Optional list of symbols to trade
+
+    Returns:
+        Dict with results for all assets
+    """
+    if not PAPER_TRADING_AVAILABLE:
+        raise ImportError("Paper trading requires aiohttp. Install with: pip install aiohttp")
+
+    config_path = config_path or (ROOT / "configs" / "multi_asset.yaml")
+    engine = WorkflowEngine(
+        config_path=config_path,
+        enable_paper_trading=True,
+    )
+
+    if not engine.paper_trading_enabled:
+        raise ValueError("Paper trading not enabled. Check BYBIT_TESTNET_KEY and BYBIT_TESTNET_SECRET env vars.")
+
+    input_cfg = OrchestratorInput(
+        symbol="MULTI",
+        interval=engine.config.timeframe,
+        config=engine.config,
+        symbols=symbols,
+    )
+
+    return engine.run_multi_asset_iteration(input_cfg)
+
+
+def get_admin_status(engine: WorkflowEngine) -> Dict[str, Any]:
+    """Get status of the admin agent."""
+    if engine.admin:
+        return engine.admin.get_status()
+    return {"error": "Admin agent not initialized"}
+
+
+def send_performance_report(engine: WorkflowEngine, lookback_days: int = 30) -> Dict[str, bool]:
+    """Send a performance report via the admin agent."""
+    if engine.admin:
+        return engine.admin.send_performance_report(lookback_days)
+    return {"error": True}

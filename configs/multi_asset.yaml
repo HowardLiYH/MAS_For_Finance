@@ -54,6 +54,55 @@ learning:
   min_usage_threshold: 5             # Min uses before pruning eligible
   min_success_rate: 0.3              # Min success rate to keep
 
+# =============================================================================
+# Admin Agent Configuration
+# =============================================================================
+# Automated reporting, monitoring, and alerting
+admin:
+  enabled: true
+  
+  # Alert thresholds
+  max_drawdown_pct: 10.0           # Alert when drawdown exceeds this %
+  daily_loss_limit_pct: 5.0        # Alert when daily loss exceeds this %
+  risk_breach_threshold: 3         # Alert after N risk breaches in 24h
+  
+  # Report schedule
+  daily_summary_enabled: true
+  daily_summary_hour: 0            # UTC hour (0 = midnight)
+  weekly_summary_enabled: true
+  weekly_summary_day: "sunday"
+  
+  # Notifications (use env vars for secrets)
+  # Set SLACK_WEBHOOK env var to enable Slack notifications
+  slack_webhook: null
+  email: null
+  log_dir: "logs/admin"
+
+# =============================================================================
+# Paper Trading Configuration
+# =============================================================================
+# Connect to Bybit Testnet for simulated live trading
+paper_trading:
+  enabled: false                   # Set to true to enable
+  exchange: "bybit_testnet"
+  
+  # API credentials (use env vars for security)
+  # Set BYBIT_TESTNET_KEY and BYBIT_TESTNET_SECRET env vars
+  api_key: null
+  api_secret: null
+  
+  # Trading limits
+  max_position_usd: 10000          # Max position size per symbol
+  default_leverage: 5
+  
+  # Symbols to trade (Bybit format)
+  symbols:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "SOLUSDT"
+    - "DOGEUSDT"
+    - "XRPUSDT"
+
 agents:
   analyst:
     id: "A1"

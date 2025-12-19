@@ -1,7 +1,7 @@
 [project]
 name = "trading-agents-phase1"
-version = "0.1.0"
-description = "Phase 1.1 data pipeline (prices + LLM dual-stream news)"
+version = "0.4.0"
+description = "Multi-Agent LLM Financial Trading System with Admin & Paper Trading"
 authors = [{name="Yuhao Li", email="li88@sas.upenn.edu"}]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,6 +18,23 @@ dependencies = [
     "openai",
     "beautifulsoup4",
     "backtrader",
+]
+
+[project.optional-dependencies]
+# Paper trading with Bybit Testnet
+paper-trading = [
+    "aiohttp>=3.9",
+    "websockets>=12.0",
+]
+# Slack notifications
+notifications = [
+    "slack-sdk>=3.26",
+]
+# All optional features
+all = [
+    "aiohttp>=3.9",
+    "websockets>=12.0",
+    "slack-sdk>=3.26",
 ]
 
 [tool.setuptools.packages.find]
