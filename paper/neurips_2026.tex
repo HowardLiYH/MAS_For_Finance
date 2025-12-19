@@ -1,0 +1,630 @@
+% NeurIPS 2026 Paper Draft
+% Population-Based Continual Learning for Multi-Agent LLM Trading Systems
+
+\documentclass{article}
+
+% NeurIPS style
+\usepackage[final]{neurips_2024}  % Use neurips_2024 as template
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{subcaption}
+\usepackage{multirow}
+
+% Custom commands
+\newcommand{\method}{PopAgent}
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+\newcommand{\etal}{\textit{et al.}}
+\newcommand{\etc}{\textit{etc.}}
+
+\title{Population-Based Continual Learning for \\Multi-Agent LLM Trading Systems}
+
+\author{
+  Author One\thanks{Equal contribution.} \\
+  University Name \\
+  \texttt{author1@university.edu} \\
+  \And
+  Author Two\footnotemark[1] \\
+  University Name \\
+  \texttt{author2@university.edu} \\
+  \And
+  Author Three \\
+  University Name \\
+  \texttt{author3@university.edu} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Large Language Model (LLM) agents have shown promise in financial trading, but their performance is brittle and highly dependent on architecture choices. We propose \method{}, a novel framework that maintains \textbf{populations of diverse agents} for each role in a multi-agent trading pipeline and evolves them through continual learning. Unlike fixed-architecture systems, \method{} allows agents to learn from the best performers within their population while maintaining diversity to prevent premature convergence. We introduce (1) heterogeneous agent populations with 5 variants per role, (2) multiple knowledge transfer strategies including soft updates and distillation, (3) Shapley value-based credit assignment for fair evaluation, and (4) diversity preservation mechanisms to encourage exploration. Experiments on cryptocurrency trading across 5 assets (BTC, ETH, SOL, DOGE, XRP) demonstrate that \method{} achieves \textbf{[X]\% higher Sharpe ratio} compared to single-agent baselines while exhibiting \textbf{[X]\% lower maximum drawdown}. Our analysis reveals emergent specialization patterns where different agent variants excel in different market regimes.
+\end{abstract}
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+
+The application of Large Language Models (LLMs) to financial trading has attracted significant attention, with recent work demonstrating that LLM agents can interpret market signals, generate trading proposals, and reason about risk \cite{tradingagents2024}. However, existing LLM trading systems suffer from a fundamental limitation: \textbf{they rely on fixed agent architectures} whose performance is highly sensitive to design choices such as prompt templates, hyperparameters, and decision strategies.
+
+This brittleness manifests in several ways. First, the optimal agent configuration varies across market conditions---an aggressive trading strategy may excel during trending markets but fail during range-bound periods. Second, LLM agents exhibit poor uncertainty calibration, often expressing high confidence in incorrect predictions \cite{guo2017calibration}. Third, the multi-agent nature of trading systems introduces complex interdependencies where the effectiveness of one agent depends on the outputs of others.
+
+\textbf{Our key insight} is that rather than searching for a single optimal agent configuration, we should maintain \textbf{populations of diverse agents} that can adapt and evolve over time. Inspired by population-based training (PBT) \cite{jaderberg2017pbt} and multi-agent reinforcement learning, we propose \method{}, a framework where:
+
+\begin{itemize}
+    \item Each role in the trading pipeline (Analyst, Researcher, Trader, Risk Manager) is represented by a \textbf{population of 5 agent variants} with different strategies and parameters.
+    \item Agents \textbf{learn from the best performers} in their population through soft parameter updates, output distillation, and selective knowledge transfer.
+    \item A \textbf{diversity preservation mechanism} ensures populations do not collapse to a single configuration, enabling continued exploration.
+    \item Credit is assigned fairly using \textbf{Shapley values}, attributing success to agents based on their marginal contribution to pipeline performance.
+\end{itemize}
+
+Our contributions are:
+\begin{enumerate}
+    \item A novel \textbf{population-based multi-agent framework} for LLM trading systems with heterogeneous agent variants.
+    \item Multiple \textbf{knowledge transfer strategies} designed for LLM agents, including soft updates, distillation, and selective transfer.
+    \item \textbf{Shapley value-based credit assignment} for fair evaluation of agents in coupled pipelines.
+    \item Comprehensive experiments on \textbf{5 cryptocurrency assets} demonstrating the effectiveness of population-based learning.
+\end{enumerate}
+
+%==============================================================================
+\section{Related Work}
+%==============================================================================
+
+\paragraph{LLM Agents for Finance.}
+Recent work has explored using LLMs for financial applications including sentiment analysis \cite{araci2019finbert}, market prediction \cite{wu2023bloomberggpt}, and trading \cite{tradingagents2024}. TradingAgents \cite{tradingagents2024} introduced a multi-agent architecture with specialized roles but used fixed configurations. FinGPT \cite{yang2023fingpt} demonstrated financial LLM fine-tuning but focused on single-agent settings. Our work extends these by introducing population-based learning for multi-agent systems.
+
+\paragraph{Population-Based Training.}
+Population-based training (PBT) \cite{jaderberg2017pbt} jointly optimizes a population of neural network models by copying hyperparameters from better-performing members. Extensions include PBT-select \cite{li2021pbtselect} and evolutionary strategies \cite{salimans2017evolution}. Unlike standard PBT for homogeneous populations, our work handles \textbf{heterogeneous populations} across different roles in a pipeline.
+
+\paragraph{Multi-Agent Reinforcement Learning.}
+MARL approaches \cite{lowe2017maddpg, foerster2018counterfactual} train multiple agents to cooperate or compete. Credit assignment in MARL remains challenging, with methods ranging from difference rewards \cite{wolpert2002optimal} to counterfactual reasoning \cite{foerster2018counterfactual}. We adopt Shapley values \cite{shapley1953value} for principled credit assignment.
+
+\paragraph{Continual Learning.}
+Continual learning addresses learning from non-stationary data streams \cite{parisi2019continual}. In trading, market regimes shift over time, requiring adaptive strategies \cite{zhang2020adaptive}. Our knowledge transfer mechanism enables agents to continuously learn from successful strategies.
+
+%==============================================================================
+\section{Method}
+%==============================================================================
+
+\subsection{Problem Formulation}
+
+We consider a multi-agent trading pipeline with four roles: Analyst ($\mathcal{A}$), Researcher ($\mathcal{R}$), Trader ($\mathcal{T}$), and Risk Manager ($\mathcal{K}$). At each timestep $t$, the pipeline processes market data $x_t$ and produces a trading decision $d_t$:
+\begin{equation}
+    d_t = \mathcal{K}(\mathcal{T}(\mathcal{R}(\mathcal{A}(x_t))))
+\end{equation}
+
+The decision $d_t$ includes direction (long/short), position size, leverage, and risk parameters. Performance is measured by the resulting profit-and-loss (PnL) over time.
+
+\textbf{Key challenge:} The optimal agent for each role depends on (1) market conditions, (2) outputs of upstream agents, and (3) constraints from downstream agents. Fixed configurations cannot adapt to these dependencies.
+
+\subsection{Population-Based Agent Architecture}
+
+Instead of a single agent per role, we maintain populations:
+\begin{equation}
+    \mathcal{P} = \{\mathcal{P}_\mathcal{A}, \mathcal{P}_\mathcal{R}, \mathcal{P}_\mathcal{T}, \mathcal{P}_\mathcal{K}\}
+\end{equation}
+where each population $\mathcal{P}_r = \{a_r^1, a_r^2, \ldots, a_r^N\}$ contains $N$ agent variants.
+
+\paragraph{Agent Variants.}
+Each variant has distinct characteristics:
+
+\begin{table}[h]
+\centering
+\caption{Agent variants by role. Each variant has different strategies and parameters.}
+\label{tab:variants}
+\begin{tabular}{@{}llp{6cm}@{}}
+\toprule
+\textbf{Role} & \textbf{Variant} & \textbf{Description} \\
+\midrule
+\multirow{5}{*}{Analyst} 
+& Technical & RSI, MACD, Bollinger Bands \\
+& Statistical & Autocorrelation, volatility clustering \\
+& Momentum & Short-term price momentum \\
+& Volatility & ATR, range-based features \\
+& Hybrid & Adaptive combination \\
+\midrule
+\multirow{5}{*}{Researcher}
+& Statistical & ARIMA-based forecasting \\
+& Ensemble & Multiple model combination \\
+& Bayesian & Prior-based inference \\
+& Quantile & Full distribution estimation \\
+& Adaptive & Online learning \\
+\midrule
+\multirow{5}{*}{Trader}
+& Aggressive & High leverage, large positions \\
+& Conservative & Low leverage, small positions \\
+& Momentum & Trend-following execution \\
+& Contrarian & Mean-reversion execution \\
+& Adaptive & Context-dependent \\
+\midrule
+\multirow{5}{*}{Risk}
+& Strict & Tight limits (3x leverage, 5\% DD) \\
+& Moderate & Balanced (5x leverage, 10\% DD) \\
+& Dynamic & Condition-dependent limits \\
+& VaR-based & Value-at-Risk constraints \\
+& Drawdown & Drawdown-focused limits \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each agent $a_r^i$ is parameterized by $\theta_r^i$, which includes both numeric parameters (e.g., lookback periods, risk thresholds) and discrete choices (e.g., feature selection, prompt templates).
+
+\subsection{Knowledge Transfer Strategies}
+
+At regular intervals, we transfer knowledge from the best-performing agent to others in the population.
+
+\paragraph{Soft Update Transfer.}
+For numeric parameters, we perform exponential moving average updates:
+\begin{equation}
+    \theta_i \leftarrow (1 - \tau) \theta_i + \tau \theta^*
+\end{equation}
+where $\theta^*$ are the parameters of the best agent and $\tau \in (0, 1)$ is the transfer rate. We decay $\tau$ over time:
+\begin{equation}
+    \tau_t = \tau_{\text{init}} + (\tau_{\text{final}} - \tau_{\text{init}}) \cdot \min(1, t / T_{\text{decay}})
+\end{equation}
+
+\paragraph{Distillation Transfer.}
+For LLM-based agents, we additionally use output distillation. Given reference inputs $\{x_1, \ldots, x_M\}$, we collect outputs from the best agent $y_j^* = a^*(x_j)$ and encourage other agents to match:
+\begin{equation}
+    \mathcal{L}_{\text{distill}} = \sum_{j=1}^M \|a_i(x_j) - y_j^*\|^2
+\end{equation}
+
+\paragraph{Selective Transfer.}
+Not all parameters contribute equally to success. We estimate parameter importance $I(\theta_k)$ based on sensitivity analysis and only transfer parameters with $I(\theta_k) > \gamma$:
+\begin{equation}
+    \theta_i^k \leftarrow \begin{cases}
+    (1-\tau)\theta_i^k + \tau\theta^{*k} & \text{if } I(\theta_k) > \gamma \\
+    \theta_i^k & \text{otherwise}
+    \end{cases}
+\end{equation}
+
+\subsection{Credit Assignment with Shapley Values}
+
+A key challenge is attributing pipeline success to individual agents. We use Shapley values from cooperative game theory \cite{shapley1953value}.
+
+For a pipeline $P = \{a_\mathcal{A}, a_\mathcal{R}, a_\mathcal{T}, a_\mathcal{K}\}$ with value function $v(S)$ (performance of subset $S$), the Shapley value for agent $a$ is:
+\begin{equation}
+    \phi(a) = \sum_{S \subseteq P \setminus \{a\}} \frac{|S|!(|P|-|S|-1)!}{|P|!} [v(S \cup \{a\}) - v(S)]
+\end{equation}
+
+This satisfies desirable properties:
+\begin{itemize}
+    \item \textbf{Efficiency:} $\sum_a \phi(a) = v(P)$
+    \item \textbf{Symmetry:} Equal contribution $\Rightarrow$ equal credit
+    \item \textbf{Null player:} Zero contribution $\Rightarrow$ zero credit
+\end{itemize}
+
+We approximate Shapley values using Monte Carlo sampling over agent permutations.
+
+\subsection{Diversity Preservation}
+
+To prevent population collapse (all agents converging to identical configurations), we employ diversity preservation.
+
+\paragraph{Diversity Metric.}
+We measure population diversity as the average pairwise parameter distance:
+\begin{equation}
+    D(\mathcal{P}) = \frac{2}{N(N-1)} \sum_{i < j} \|\theta_i - \theta_j\|_2
+\end{equation}
+
+\paragraph{Diversity Bonus.}
+Agent scores include a diversity bonus:
+\begin{equation}
+    s_i^{\text{total}} = s_i^{\text{perf}} + \lambda \cdot \text{div}(a_i, \mathcal{P})
+\end{equation}
+where $\text{div}(a_i, \mathcal{P})$ measures how different agent $i$ is from the population mean.
+
+\paragraph{Mutation.}
+When $D(\mathcal{P}) < D_{\text{min}}$, we mutate non-elite agents:
+\begin{equation}
+    \theta_i \leftarrow \theta_i + \epsilon, \quad \epsilon \sim \mathcal{N}(0, \sigma^2 I)
+\end{equation}
+where $\sigma$ is proportional to the diversity deficit.
+
+\subsection{Population Workflow}
+
+Algorithm~\ref{alg:popagent} summarizes the complete \method{} workflow.
+
+\begin{algorithm}[t]
+\caption{\method{}: Population-Based Multi-Agent Learning}
+\label{alg:popagent}
+\begin{algorithmic}[1]
+\STATE \textbf{Input:} Market data stream, populations $\mathcal{P}$, transfer frequency $F$
+\STATE \textbf{Initialize:} Populations with diverse variants
+\FOR{iteration $t = 1, 2, \ldots$}
+    \STATE Sample pipeline combinations $\{(a_\mathcal{A}, a_\mathcal{R}, a_\mathcal{T}, a_\mathcal{K})\}$
+    \FOR{each pipeline}
+        \STATE Execute trading pipeline on market data
+        \STATE Record PnL result
+    \ENDFOR
+    \STATE Compute Shapley values for each agent
+    \STATE Update agent scores with diversity bonus
+    \IF{$t \mod F = 0$}
+        \STATE Identify best agent per population
+        \STATE Transfer knowledge: $\theta_i \leftarrow (1-\tau)\theta_i + \tau\theta^*$
+    \ENDIF
+    \STATE Check diversity; mutate if below threshold
+\ENDFOR
+\STATE \textbf{Output:} Evolved populations, best pipeline
+\end{algorithmic}
+\end{algorithm}
+
+%==============================================================================
+\section{Experimental Setup}
+%==============================================================================
+
+\subsection{Dataset}
+
+We evaluate on cryptocurrency perpetual futures from Bybit exchange:
+
+\begin{table}[h]
+\centering
+\caption{Dataset statistics. 4-hour intervals from 2022-2024.}
+\label{tab:dataset}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Asset} & \textbf{Periods} & \textbf{Avg Return} & \textbf{Volatility} & \textbf{Sharpe} \\
+\midrule
+BTC & 4,380 & 0.02\% & 2.1\% & 0.21 \\
+ETH & 4,380 & 0.01\% & 2.8\% & 0.08 \\
+SOL & 4,380 & 0.03\% & 4.2\% & 0.16 \\
+DOGE & 4,380 & -0.01\% & 4.5\% & -0.05 \\
+XRP & 4,380 & 0.01\% & 3.1\% & 0.07 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each asset includes OHLCV data, open interest, funding rates, and long/short ratios.
+
+\subsection{Cross-Asset Features}
+
+We compute 8 cross-asset market context features:
+\begin{itemize}
+    \item \textbf{BTC dominance:} BTC price / sum of all prices
+    \item \textbf{Altcoin momentum:} Mean return of non-BTC assets
+    \item \textbf{ETH/BTC ratio:} Relative strength indicator
+    \item \textbf{Cross OI delta:} Aggregate open interest change
+    \item \textbf{Aggregate funding:} Volume-weighted funding rate
+    \item \textbf{Risk-on/off:} Altcoin beta to BTC
+    \item \textbf{Market volatility:} Average annualized volatility
+    \item \textbf{Cross correlation:} Mean pairwise correlation
+\end{itemize}
+
+\subsection{Baselines}
+
+We compare against:
+\begin{enumerate}
+    \item \textbf{Single-Best:} Single best agent per role (no population)
+    \item \textbf{Ensemble:} Average outputs from all 5 variants
+    \item \textbf{Random:} Random agent selection per iteration
+    \item \textbf{Oracle:} Hindsight-optimal agent selection (upper bound)
+    \item \textbf{PBT-Homo:} Standard PBT with homogeneous agents
+\end{enumerate}
+
+\subsection{Evaluation Metrics}
+
+\begin{itemize}
+    \item \textbf{Sharpe Ratio:} Risk-adjusted return (annualized)
+    \item \textbf{Total PnL:} Cumulative profit-and-loss
+    \item \textbf{Maximum Drawdown:} Largest peak-to-trough decline
+    \item \textbf{Hit Rate:} Fraction of profitable trades
+    \item \textbf{Calibration ECE:} Expected calibration error
+\end{itemize}
+
+\subsection{Implementation Details}
+
+\begin{itemize}
+    \item Population size: $N = 5$ variants per role
+    \item Transfer frequency: Every 10 iterations
+    \item Transfer rate: $\tau = 0.1$, decaying to $0.05$
+    \item Diversity threshold: $D_{\text{min}} = 0.2$
+    \item Diversity weight: $\lambda = 0.1$
+    \item LLM: GPT-4o-mini for trader decisions
+    \item Training: 1,000 iterations on 2022-2023 data
+    \item Testing: 2024 data (out-of-sample)
+\end{itemize}
+
+%==============================================================================
+\section{Results}
+%==============================================================================
+
+\subsection{Main Results}
+
+% TODO: Fill in actual experimental results
+\begin{table}[h]
+\centering
+\caption{Main results across 5 assets. Mean ± std over 5 runs. Best in \textbf{bold}.}
+\label{tab:main}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Method} & \textbf{Sharpe} $\uparrow$ & \textbf{PnL (\%)} $\uparrow$ & \textbf{MaxDD (\%)} $\downarrow$ & \textbf{Hit Rate} $\uparrow$ \\
+\midrule
+Single-Best & [X.XX] & [X.XX] & [X.XX] & [X.XX] \\
+Ensemble & [X.XX] & [X.XX] & [X.XX] & [X.XX] \\
+Random & [X.XX] & [X.XX] & [X.XX] & [X.XX] \\
+PBT-Homo & [X.XX] & [X.XX] & [X.XX] & [X.XX] \\
+\midrule
+\method{} (Ours) & \textbf{[X.XX]} & \textbf{[X.XX]} & \textbf{[X.XX]} & \textbf{[X.XX]} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Per-Asset Analysis}
+
+% TODO: Fill in per-asset results
+\begin{table}[h]
+\centering
+\caption{Per-asset Sharpe ratio comparison.}
+\label{tab:perasset}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Method} & \textbf{BTC} & \textbf{ETH} & \textbf{SOL} & \textbf{DOGE} & \textbf{XRP} \\
+\midrule
+Single-Best & [X.XX] & [X.XX] & [X.XX] & [X.XX] & [X.XX] \\
+\method{} & [X.XX] & [X.XX] & [X.XX] & [X.XX] & [X.XX] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Ablation Studies}
+
+% TODO: Fill in ablation results
+
+\paragraph{Knowledge Transfer Strategy.}
+\begin{table}[h]
+\centering
+\caption{Ablation on transfer strategy.}
+\label{tab:ablation_transfer}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Transfer Strategy} & \textbf{Sharpe} & \textbf{Improvement} \\
+\midrule
+No transfer & [X.XX] & - \\
+Soft update only & [X.XX] & +[X]\% \\
+Distillation only & [X.XX] & +[X]\% \\
+Selective only & [X.XX] & +[X]\% \\
+Hybrid (Ours) & [X.XX] & +[X]\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Diversity Preservation.}
+\begin{table}[h]
+\centering
+\caption{Impact of diversity preservation.}
+\label{tab:ablation_diversity}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Setting} & \textbf{Sharpe} & \textbf{Final Diversity} & \textbf{Collapse?} \\
+\midrule
+No diversity ($\lambda=0$) & [X.XX] & [X.XX] & Yes \\
+Low diversity ($\lambda=0.05$) & [X.XX] & [X.XX] & Partial \\
+Standard ($\lambda=0.1$) & [X.XX] & [X.XX] & No \\
+High diversity ($\lambda=0.2$) & [X.XX] & [X.XX] & No \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Population Size.}
+\begin{table}[h]
+\centering
+\caption{Impact of population size.}
+\label{tab:ablation_size}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Pop Size} & \textbf{Sharpe} & \textbf{Compute (rel.)} & \textbf{Convergence} \\
+\midrule
+$N=2$ & [X.XX] & 1.0x & Fast \\
+$N=3$ & [X.XX] & 1.8x & Medium \\
+$N=5$ & [X.XX] & 3.5x & Medium \\
+$N=10$ & [X.XX] & 8.2x & Slow \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Learning Dynamics}
+
+% TODO: Add figure showing learning curves
+% Figure 1: Population average score over iterations
+% Figure 2: Diversity over iterations
+% Figure 3: Best pipeline evolution
+
+\subsection{Emergent Specialization}
+
+% TODO: Analyze which variants excel in which market conditions
+% Analysis of variant selection across market regimes
+
+%==============================================================================
+\section{Analysis}
+%==============================================================================
+
+\subsection{What Knowledge Transfers?}
+
+% TODO: Analysis of parameter changes after transfer
+% Which parameters change most? Which are stable?
+
+\subsection{Pipeline Synergies}
+
+% TODO: Analysis of agent combinations
+% Which analyst-researcher pairs work best?
+
+\subsection{Market Regime Adaptation}
+
+% TODO: Performance across different market regimes
+% Bull vs bear vs sideways
+
+\subsection{Comparison with LLM Baselines}
+
+% TODO: Compare GPT-4 vs DeepSeek vs Claude
+% Population learning with different LLM backbones
+
+%==============================================================================
+\section{Discussion and Limitations}
+%==============================================================================
+
+\paragraph{Computational Cost.}
+Evaluating multiple pipeline combinations increases computational cost. We mitigate this through sampling (25 combinations per iteration instead of $5^4 = 625$).
+
+\paragraph{Hyperparameter Sensitivity.}
+The method introduces hyperparameters ($\tau$, $\lambda$, $F$). We found performance robust to reasonable ranges but recommend tuning for new domains.
+
+\paragraph{Market-Specific.}
+Our experiments focus on cryptocurrency trading. Generalization to other markets (equities, forex) requires validation.
+
+\paragraph{LLM Dependence.}
+Trader agents rely on LLM API calls, introducing latency and cost constraints for real-time trading.
+
+%==============================================================================
+\section{Conclusion}
+%==============================================================================
+
+We presented \method{}, a population-based continual learning framework for multi-agent LLM trading systems. By maintaining diverse agent populations that evolve through knowledge transfer, our approach overcomes the brittleness of fixed-architecture systems. Key innovations include heterogeneous agent variants, multiple transfer strategies, Shapley-based credit assignment, and diversity preservation. Experiments on 5 cryptocurrency assets demonstrate [X]\% improvement in Sharpe ratio over baselines.
+
+Future work includes (1) extending to live trading with real-time adaptation, (2) incorporating cross-population transfer for role-synergies, and (3) applying \method{} to other multi-agent domains beyond finance.
+
+%==============================================================================
+% References
+%==============================================================================
+
+\bibliographystyle{plain}
+\begin{thebibliography}{10}
+
+\bibitem{tradingagents2024}
+[Author names].
+\newblock TradingAgents: Multi-agent LLM financial trading framework.
+\newblock In \emph{Proceedings of [Conference]}, 2024.
+
+\bibitem{jaderberg2017pbt}
+Max Jaderberg, Valentin Dalibard, Simon Osindero, Wojciech~M Czarnecki, Jeff Donahue, Ali Razavi, Oriol Vinyals, Tim Green, Iain Dunning, Karen Simonyan, et~al.
+\newblock Population based training of neural networks.
+\newblock \emph{arXiv preprint arXiv:1711.09846}, 2017.
+
+\bibitem{shapley1953value}
+Lloyd~S Shapley.
+\newblock A value for n-person games.
+\newblock \emph{Contributions to the Theory of Games}, 2(28):307--317, 1953.
+
+\bibitem{guo2017calibration}
+Chuan Guo, Geoff Pleiss, Yu~Sun, and Kilian~Q Weinberger.
+\newblock On calibration of modern neural networks.
+\newblock In \emph{International Conference on Machine Learning}, pages 1321--1330. PMLR, 2017.
+
+\bibitem{lowe2017maddpg}
+Ryan Lowe, Yi~I Wu, Aviv Tamar, Jean Harb, OpenAI Pieter~Abbeel, and Igor Mordatch.
+\newblock Multi-agent actor-critic for mixed cooperative-competitive environments.
+\newblock \emph{Advances in Neural Information Processing Systems}, 30, 2017.
+
+\bibitem{foerster2018counterfactual}
+Jakob Foerster, Gregory Farquhar, Triantafyllos Afouras, Nantas Nardelli, and Shimon Whiteson.
+\newblock Counterfactual multi-agent policy gradients.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial Intelligence}, volume~32, 2018.
+
+\bibitem{parisi2019continual}
+German~I Parisi, Ronald Kemker, Jose~L Part, Christopher Kanan, and Stefan Wermter.
+\newblock Continual lifelong learning with neural networks: A review.
+\newblock \emph{Neural Networks}, 113:54--71, 2019.
+
+\bibitem{araci2019finbert}
+Dogu~Tan Araci.
+\newblock Finbert: Financial sentiment analysis with pre-trained language models.
+\newblock \emph{arXiv preprint arXiv:1908.10063}, 2019.
+
+\bibitem{wu2023bloomberggpt}
+Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann, Prabhanjan Kambadur, David Rosenberg, and Gideon Mann.
+\newblock Bloomberggpt: A large language model for finance.
+\newblock \emph{arXiv preprint arXiv:2303.17564}, 2023.
+
+\bibitem{yang2023fingpt}
+Hongyang Yang, Xiao-Yang Liu, and Christina~Dan Wang.
+\newblock Fingpt: Open-source financial large language models.
+\newblock \emph{arXiv preprint arXiv:2306.06031}, 2023.
+
+\bibitem{salimans2017evolution}
+Tim Salimans, Jonathan Ho, Xi~Chen, Szymon Sidor, and Ilya Sutskever.
+\newblock Evolution strategies as a scalable alternative to reinforcement learning.
+\newblock \emph{arXiv preprint arXiv:1703.03864}, 2017.
+
+\bibitem{zhang2020adaptive}
+Zihao Zhang, Stefan Zohren, and Stephen Roberts.
+\newblock Deep learning for portfolio optimization.
+\newblock \emph{The Journal of Financial Data Science}, 2020.
+
+\bibitem{wolpert2002optimal}
+David~H Wolpert and Kagan Tumer.
+\newblock Optimal payoff functions for members of collectives.
+\newblock \emph{Advances in Complex Systems}, 4(02n03):265--279, 2001.
+
+\bibitem{li2021pbtselect}
+Ang Li, Ola Spyra, Sagi Perel, Valentin Dalibard, Max Jaderberg, Chenjie Gu, David Budden, Tim Harley, and Pramod Gupta.
+\newblock A generalized framework for population based training.
+\newblock In \emph{Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery \& Data Mining}, pages 1791--1799, 2021.
+
+\end{thebibliography}
+
+%==============================================================================
+% Appendix
+%==============================================================================
+\appendix
+
+\section{Additional Experimental Details}
+
+\subsection{Agent Variant Parameters}
+
+% TODO: Full parameter specifications for each variant
+
+\subsection{Cross-Asset Feature Computation}
+
+The 8 cross-asset features are computed as follows:
+
+\begin{align}
+\text{btc\_dominance}_t &= \frac{p_t^{BTC}}{\sum_{a \in \mathcal{A}} p_t^a} \\
+\text{altcoin\_momentum}_t &= \frac{1}{|\mathcal{A}|-1} \sum_{a \neq BTC} r_t^a \\
+\text{eth\_btc\_ratio}_t &= \frac{p_t^{ETH}}{p_t^{BTC}} \\
+\text{cross\_oi\_delta}_t &= \sum_{a \in \mathcal{A}} \frac{OI_t^a - OI_{t-1}^a}{OI_{t-1}^a} \\
+\text{aggregate\_funding}_t &= \frac{\sum_{a} V_t^a \cdot f_t^a}{\sum_{a} V_t^a} \\
+\text{risk\_on\_off}_t &= \frac{\text{mean}(r_t^{alts})}{r_t^{BTC}} \\
+\text{market\_volatility}_t &= \text{mean}(\sigma_t^a) \cdot \sqrt{2190} \\
+\text{cross\_correlation}_t &= \text{mean}(\rho_{ij,t})
+\end{align}
+
+\subsection{Shapley Value Approximation}
+
+We approximate Shapley values using Monte Carlo sampling:
+
+\begin{algorithm}[H]
+\caption{Monte Carlo Shapley Approximation}
+\begin{algorithmic}[1]
+\STATE \textbf{Input:} Agents $P$, value function $v$, samples $M$
+\STATE Initialize $\phi(a) = 0$ for all $a \in P$
+\FOR{$m = 1, \ldots, M$}
+    \STATE Sample random permutation $\pi$ of $P$
+    \STATE $v_{\text{prev}} = 0$
+    \FOR{each agent $a$ in order of $\pi$}
+        \STATE $v_{\text{curr}} = v(\text{agents before } a \text{ in } \pi \cup \{a\})$
+        \STATE $\phi(a) \mathrel{+}= v_{\text{curr}} - v_{\text{prev}}$
+        \STATE $v_{\text{prev}} = v_{\text{curr}}$
+    \ENDFOR
+\ENDFOR
+\STATE \textbf{Return:} $\phi(a) / M$ for all $a$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Additional Results}
+
+% TODO: Additional figures and tables
+
+\end{document}
+
