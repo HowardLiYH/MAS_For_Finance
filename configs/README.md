@@ -77,4 +77,3 @@ Configure inventory methods for each agent type:
 | DOGE | Dogecoin | `single/doge.yaml` |
 | XRP | Ripple | `single/xrp.yaml` |
 | MULTI | All 5 coins | `multi_asset.yaml` |
-

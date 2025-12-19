@@ -10,7 +10,7 @@ data:
   timeframe: "4h"
   max_days: 730
   out_dir: "data/single/sol"
-  
+
   multi_asset: false
   offline_prices_csv: "data/bybit/Bybit_SOL.csv"
 
@@ -63,4 +63,3 @@ agents:
 
   evaluator:
     id: "E1"
-

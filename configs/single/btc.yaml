@@ -12,7 +12,7 @@ data:
   timeframe: "4h"
   max_days: 730
   out_dir: "data/single/btc"
-  
+
   # Single-asset mode
   multi_asset: false
   offline_prices_csv: "data/bybit/Bybit_BTC.csv"
@@ -70,4 +70,3 @@ agents:
 
   evaluator:
     id: "E1"
-
