@@ -2,7 +2,7 @@
 
 ## 🚀 Multi-Asset Crypto Trading with Cross-Market Intelligence
 
-A modular, LLM-powered trading system that trades **5 cryptocurrencies** (BTC, ETH, SOL, DOGE, XRP) with cross-asset market context features.
+A modular, LLM-powered trading system that trades **5 cryptocurrencies** (BTC, ETH, SOL, DOGE, XRP) with cross-asset market context features and **population-based continual learning**.
 
 | Coin | Symbol | Description |
 |------|--------|-------------|
@@ -11,6 +11,50 @@ A modular, LLM-powered trading system that trades **5 cryptocurrencies** (BTC, E
 | Solana | SOL | High-performance L1 |
 | Dogecoin | DOGE | Meme coin / retail sentiment |
 | Ripple | XRP | Payment-focused crypto |
+
+---
+
+## 🧬 Key Innovation: Population-Based Agent Learning
+
+Unlike traditional multi-agent systems with fixed architectures, our system maintains **populations of diverse agents** for each role that evolve through continual learning:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    POPULATION-BASED LEARNING                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Analyst Population    Researcher Population   Trader Population       │
+│  ┌───┐ ┌───┐ ┌───┐    ┌───┐ ┌───┐ ┌───┐      ┌───┐ ┌───┐ ┌───┐       │
+│  │A-1│ │A-2│ │A-3│    │R-1│ │R-2│ │R-3│      │T-1│ │T-2│ │T-3│       │
+│  │ ★ │ │   │ │   │    │   │ │ ★ │ │   │      │   │ │   │ │ ★ │       │
+│  └───┘ └───┘ └───┘    └───┘ └───┘ └───┘      └───┘ └───┘ └───┘       │
+│    │                      │                      │                     │
+│    ▼                      ▼                      ▼                     │
+│  ┌─────────────────────────────────────────────────────────────┐      │
+│  │                     EVALUATOR                                │      │
+│  │  Score all agents → Identify best (★) → Transfer knowledge  │      │
+│  └─────────────────────────────────────────────────────────────┘      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Agent Variants (5 per role)
+
+| Role | Variants | Description |
+|------|----------|-------------|
+| **Analyst** | Technical, Statistical, Momentum, Volatility, Hybrid | Feature extraction strategies |
+| **Researcher** | Statistical, Ensemble, Bayesian, Quantile, Adaptive | Forecasting approaches |
+| **Trader** | Aggressive, Conservative, Momentum, Contrarian, Adaptive | Execution styles |
+| **Risk** | Strict, Moderate, Dynamic, VaR-based, Drawdown | Risk tolerance levels |
+
+### Learning Mechanisms
+
+| Mechanism | Description |
+|-----------|-------------|
+| **Soft Update** | Gradually blend parameters toward best performer |
+| **Distillation** | Train agents to match best agent's outputs |
+| **Selective Transfer** | Only transfer high-importance parameters |
+| **Diversity Preservation** | Mutation to prevent population collapse |
 
 ---
 
@@ -27,6 +71,15 @@ cp /path/to/Bybit_CSV_Data/*.csv data/bybit/
 
 # Run multi-asset trading
 python -m trading_agents.cli multi --config configs/multi_asset.yaml
+```
+
+### Population-Based Learning Mode
+```bash
+# Run with population-based learning
+python -m trading_agents.cli population --config configs/multi_asset.yaml
+
+# With custom population size
+python -m trading_agents.cli population --pop-size 5 --transfer-freq 10
 ```
 
 ### Single-Asset Mode
@@ -81,607 +134,130 @@ When running in multi-asset mode, the system generates 8 cross-asset signals:
 
 ```
 MAS_Final_With_Agents/
-├── trading_agents/              # Core multi-agent trading system
-│   ├── agents/                  # Agent implementations
-│   │   ├── analyst.py           # Feature & trend extraction
-│   │   ├── researcher.py        # Forecasting & uncertainty
-│   │   ├── trader.py            # LLM-powered order generation
-│   │   ├── risk.py              # Risk validation
-│   │   ├── evaluator.py         # Performance scoring
-│   │   └── admin.py             # Monitoring & reporting
-│   ├── inventory/               # Pluggable strategy methods
-│   │   ├── analyst/             # TALib, STL, HMM, Kalman
-│   │   ├── researcher/          # ARIMAX, TFT, Bootstrap
-│   │   ├── trader/              # Market, Limit execution
-│   │   └── risk/                # VaR, Leverage, Margin checks
-│   ├── config/                  # Configuration management
-│   ├── optimization/            # Continual learning
-│   ├── services/                # Services layer
-│   │   ├── llm.py               # LLM proposal generation
-│   │   ├── metrics.py           # Performance tracking
-│   │   ├── events.py            # Event bus system
-│   │   ├── alerts.py            # Alert rules engine
-│   │   ├── notifications.py     # Slack/console/file notifications
-│   │   ├── reports.py           # Report generation
-│   │   ├── bybit_client.py      # Bybit Testnet API client
-│   │   ├── order_manager.py     # Order lifecycle management
-│   │   └── positions.py         # Position tracking
-│   ├── workflow.py              # WorkflowEngine
-│   └── cli.py                   # Command-line interface
+├── trading_agents/                 # Core multi-agent trading system
+│   ├── agents/                     # Agent implementations
+│   │   ├── analyst.py              # Feature & trend extraction
+│   │   ├── researcher.py           # Forecasting & uncertainty
+│   │   ├── trader.py               # LLM-powered order generation
+│   │   ├── risk.py                 # Risk validation
+│   │   ├── evaluator.py            # Performance scoring
+│   │   └── admin.py                # Monitoring & reporting
+│   │
+│   ├── population/                 # 🆕 Population-based learning
+│   │   ├── base.py                 # AgentPopulation class
+│   │   ├── variants.py             # 5 variants per agent role
+│   │   ├── transfer.py             # Knowledge transfer strategies
+│   │   ├── diversity.py            # Diversity preservation
+│   │   ├── scoring.py              # Shapley-based credit assignment
+│   │   └── workflow.py             # PopulationWorkflow engine
+│   │
+│   ├── inventory/                  # Pluggable strategy methods
+│   │   ├── analyst/                # TALib, STL, HMM, Kalman
+│   │   ├── researcher/             # ARIMAX, TFT, Bootstrap
+│   │   ├── trader/                 # Market, Limit execution
+│   │   └── risk/                   # VaR, Leverage, Margin checks
+│   │
+│   ├── services/                   # Services layer
+│   │   ├── llm.py                  # LLM proposal generation
+│   │   ├── metrics.py              # Performance tracking
+│   │   ├── events.py               # Event bus system
+│   │   ├── alerts.py               # Alert rules engine
+│   │   ├── notifications.py        # Slack/console notifications
+│   │   ├── bybit_client.py         # Bybit Testnet API
+│   │   └── order_manager.py        # Order lifecycle
+│   │
+│   ├── config/                     # Configuration management
+│   ├── optimization/               # Continual learning
+│   ├── workflow.py                 # WorkflowEngine
+│   └── cli.py                      # Command-line interface
 │
-├── data_pipeline/               # Data fetching & processing
-│   ├── news/                    # News intelligence
-│   │   ├── providers/           # Search providers
-│   │   │   ├── search_bocha.py  # Bocha AI search
-│   │   │   └── search_serpapi.py# SerpAPI (legacy)
-│   │   ├── llm_prompt_search.py # LLM-planned queries
-│   │   ├── multi_asset_queries.py # Asset-specific queries
-│   │   ├── sources.py           # Source credibility
-│   │   ├── enrichment.py        # LLM news enrichment
-│   │   └── aggregation.py       # News clustering
+├── data_pipeline/                  # Data fetching & processing
+│   ├── news/                       # News intelligence
+│   │   ├── providers/              # Bocha, SerpAPI
+│   │   ├── enrichment.py           # LLM news enrichment
+│   │   ├── aggregation.py          # News clustering
+│   │   └── sources.py              # Source credibility
 │   └── pipeline/
-│       ├── multi_asset.py       # 5-coin Bybit loader
-│       ├── cross_features.py    # Cross-asset signals
-│       └── data_pipeline.py     # Unified entry point
+│       ├── multi_asset.py          # 5-coin Bybit loader
+│       └── cross_features.py       # Cross-asset signals
 │
-├── configs/                     # YAML configurations
-│   ├── multi_asset.yaml         # 5-coin trading (RECOMMENDED)
-│   └── single/                  # Per-coin configs
-│       ├── btc.yaml
-│       ├── eth.yaml
-│       ├── sol.yaml
-│       ├── doge.yaml
-│       └── xrp.yaml
+├── configs/                        # YAML configurations
+│   ├── multi_asset.yaml            # 5-coin trading
+│   └── single/                     # Per-coin configs
 │
-└── data/                        # Market data
-    ├── bybit/                   # Bybit CSV source files
-    ├── multi_asset/             # Multi-asset outputs
-    └── single/                  # Single-asset outputs
+├── data/                           # Market data
+│   └── bybit/                      # Bybit CSV files
+│
+└── docs/
+    └── ARCHITECTURE.md             # Detailed architecture diagrams
 ```
 
 ---
 
 ## 🤖 Agent Descriptions
 
-### Analyst Agent
-Processes time-series price data to extract:
-- **Features**: TALib technical indicators, STL decomposition
-- **Trends**: Gaussian HMM regime detection, Kalman filter
+### Analyst Agent (5 Variants)
+| Variant | Focus | Key Parameters |
+|---------|-------|----------------|
+| Technical | TALib indicators | RSI, MACD, BB, ADX |
+| Statistical | Autocorrelation, volatility | Lookback 20-120 |
+| Momentum | Rate of change | Short lookbacks 5-20 |
+| Volatility | ATR, range, BB width | Regime detection |
+| Hybrid | Adaptive mix | Dynamic weights |
 
-### Researcher Agent
-Generates trading signals with uncertainty:
-- **Forecasting**: ARIMAX, Temporal Fusion Transformer
-- **Uncertainty**: Bootstrap ensemble, Quantile regression
-- **Calibration**: Temperature scaling, Conformal prediction
+### Researcher Agent (5 Variants)
+| Variant | Method | Uncertainty |
+|---------|--------|-------------|
+| Statistical | ARIMA-based | Bootstrap CI |
+| Ensemble | Multiple models | Ensemble std |
+| Bayesian | Prior-based | Posterior |
+| Quantile | Quantile regression | Full distribution |
+| Adaptive | Online learning | Adaptive window |
 
-### Trader Agent
-LLM-powered order generation:
-- Interprets research signals + news narratives
-- Selects execution style (aggressive market / passive limit)
-- Outputs: position size, leverage, TP/SL, liquidation price
+### Trader Agent (5 Variants)
+| Variant | Style | Risk Profile |
+|---------|-------|--------------|
+| Aggressive | High leverage, large size | 3% risk/trade |
+| Conservative | Low leverage, small size | 1% risk/trade |
+| Momentum | Trend following | 2% risk/trade |
+| Contrarian | Fade moves | 1.5% risk/trade |
+| Adaptive | Context-dependent | Dynamic |
 
-### Risk Manager Agent
-Validates orders with three verdicts:
-- **pass**: Order within all limits
-- **soft_fail**: Minor violation, can adjust
-- **hard_fail**: Critical violation, abort
-
-### Evaluator Agent
-Tracks performance metrics:
-- Sharpe ratio, PnL, Hit rate
-- Max drawdown, Calibration ECE
-
-### Admin Agent
-System monitoring and reporting:
-- Event-driven alert system
-- Scheduled performance reports
-- Multi-channel notifications (Slack, Console, File)
-
----
-
-## 🔄 System Workflow
-
-### High-Level Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         MULTI-AGENT TRADING SYSTEM                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
-│  │ DATA PIPELINE│────▶│TRADING AGENTS│────▶│  EXECUTION   │            │
-│  │              │     │              │     │              │            │
-│  │ • Price Data │     │ • Analyst    │     │ • Risk Check │            │
-│  │ • News Data  │     │ • Researcher │     │ • Order Exec │            │
-│  │ • Cross-Asset│     │ • Trader     │     │ • Eval Score │            │
-│  └──────────────┘     └──────────────┘     └──────────────┘            │
-│         │                    │                    │                     │
-│         ▼                    ▼                    ▼                     │
-│  ┌─────────────────────────────────────────────────────────┐           │
-│  │                      EVENT BUS                          │           │
-│  │  Publishes: trade_signal, order_executed, pnl_update   │           │
-│  └─────────────────────────────────────────────────────────┘           │
-│         │                    │                    │                     │
-│         ▼                    ▼                    ▼                     │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
-│  │ ADMIN AGENT  │     │   ALERTS     │     │   REPORTS    │            │
-│  │              │     │              │     │              │            │
-│  │ • Monitoring │     │ • Drawdown   │     │ • Daily      │            │
-│  │ • Scheduling │     │ • Risk Breach│     │ • Weekly     │            │
-│  │ • Notify     │     │ • Low Sharpe │     │ • Performance│            │
-│  └──────────────┘     └──────────────┘     └──────────────┘            │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+### Risk Manager (5 Variants)
+| Variant | Max Leverage | Max Drawdown |
+|---------|--------------|--------------|
+| Strict | 3x | 5% |
+| Moderate | 5x | 10% |
+| Dynamic | 6x | 12% |
+| VaR-based | 5x | 8% |
+| Drawdown | 4x | 6% |
 
 ---
 
-### Data Pipeline Workflow
+## 🔄 Population Learning Workflow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          DATA PIPELINE                                  │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  PRICE DATA FLOW                                                        │
-│  ══════════════                                                         │
-│                                                                         │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
-│  │  Bybit CSVs  │────▶│ Load & Parse │────▶│  Per-Asset   │            │
-│  │              │     │              │     │  DataFrames  │            │
-│  │ • BTC.csv    │     │ • Timestamp  │     │              │            │
-│  │ • ETH.csv    │     │ • OHLCV      │     │ • close      │            │
-│  │ • SOL.csv    │     │ • OI, Fund   │     │ • volume     │            │
-│  │ • DOGE.csv   │     │ • LS Ratio   │     │ • oi         │            │
-│  │ • XRP.csv    │     │              │     │ • funding    │            │
-│  └──────────────┘     └──────────────┘     └──────────────┘            │
-│                                                   │                     │
-│                                                   ▼                     │
-│                              ┌──────────────────────────────┐          │
-│                              │    CROSS-ASSET FEATURES      │          │
-│                              │                              │          │
-│                              │  btc_dominance    = BTC/Total│          │
-│                              │  altcoin_momentum = ALT rets │          │
-│                              │  eth_btc_ratio    = ETH/BTC  │          │
-│                              │  cross_oi_delta   = ΔOI sum  │          │
-│                              │  aggregate_funding= wgt fund │          │
-│                              │  risk_on_off      = ALT beta │          │
-│                              │  market_volatility= avg vol  │          │
-│                              │  cross_correlation= pairwise │          │
-│                              └──────────────────────────────┘          │
-│                                                                         │
-│  NEWS DATA FLOW                                                         │
-│  ══════════════                                                         │
-│                                                                         │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
-│  │ LLM Query    │────▶│ Bocha Search │────▶│ Raw Articles │            │
-│  │ Generation   │     │ API          │     │              │            │
-│  │              │     │              │     │ • title      │            │
-│  │ "Generate 5  │     │ • freshness  │     │ • summary    │            │
-│  │  queries for │     │ • count: 20  │     │ • url        │            │
-│  │  BTC news"   │     │              │     │ • date       │            │
-│  └──────────────┘     └──────────────┘     └──────────────┘            │
-│                                                   │                     │
-│                                                   ▼                     │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
-│  │ Source       │────▶│ LLM Enrich   │────▶│ Aggregate    │            │
-│  │ Credibility  │     │              │     │              │            │
-│  │              │     │ • sentiment  │     │ • cluster    │            │
-│  │ Tier 1: 1.0  │     │ • event_type │     │ • dominant   │            │
-│  │ Tier 2: 0.7  │     │ • entities   │     │   narratives │            │
-│  │ Tier 3: 0.4  │     │ • impact     │     │ • digest     │            │
-│  └──────────────┘     └──────────────┘     └──────────────┘            │
-│                                                   │                     │
-│                                                   ▼                     │
-│                              ┌──────────────────────────────┐          │
-│                              │        NEWS DIGEST           │          │
-│                              │                              │          │
-│                              │  sentiment_score: +0.35      │          │
-│                              │  overall_sentiment: bullish  │          │
-│                              │  dominant_narratives: [...]  │          │
-│                              │  key_events: [...]           │          │
-│                              │  asset_sentiment: {BTC: ...} │          │
-│                              └──────────────────────────────┘          │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Trading Agent Workflow
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        TRADING AGENT WORKFLOW                           │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  FOR EACH ASSET (BTC, ETH, SOL, DOGE, XRP):                            │
-│                                                                         │
-│  ┌──────────────┐                                                       │
-│  │ Price Data   │─────────────────────────────┐                         │
-│  │ + Cross-Asset│                             │                         │
-│  │   Features   │                             ▼                         │
-│  └──────────────┘                    ┌─────────────────┐               │
-│                                      │  ANALYST AGENT  │               │
-│                                      │                 │               │
-│                                      │ ┌─────────────┐ │               │
-│                                      │ │ TALib_Basic │ │               │
-│                                      │ │ STL_Decomp  │ │               │
-│                                      │ │ Gaussian_HMM│ │               │
-│                                      │ │ Kalman_Filt │ │               │
-│                                      │ └─────────────┘ │               │
-│                                      │                 │               │
-│                                      │ Output:         │               │
-│                                      │ • features_df   │               │
-│                                      │ • trend_dict    │               │
-│                                      └────────┬────────┘               │
-│                                               │                         │
-│                                               ▼                         │
-│                                      ┌─────────────────┐               │
-│                                      │RESEARCHER AGENT │               │
-│                                      │                 │               │
-│                                      │ ┌─────────────┐ │               │
-│                                      │ │ ARIMAX_Fcst │ │               │
-│                                      │ │ TFT_Forecast│ │               │
-│                                      │ │ Bootstrap_UQ│ │               │
-│                                      │ │ Quantile_UQ │ │               │
-│                                      │ │ Temp_Calib  │ │               │
-│                                      │ └─────────────┘ │               │
-│                                      │                 │               │
-│                                      │ Output:         │               │
-│                                      │ • ResearchSum   │               │
-│                                      │   - forecast    │               │
-│                                      │   - confidence  │               │
-│                                      │   - risk        │               │
-│                                      └────────┬────────┘               │
-│                                               │                         │
-│  ┌──────────────┐                             │                         │
-│  │ News Digest  │─────────────────────────────┤                         │
-│  │              │                             │                         │
-│  │ • sentiment  │                             ▼                         │
-│  │ • narratives │                    ┌─────────────────┐               │
-│  │ • key events │                    │  TRADER AGENT   │               │
-│  └──────────────┘                    │                 │               │
-│                                      │ ┌─────────────┐ │               │
-│                                      │ │  LLM Call   │ │               │
-│                                      │ │  (GPT-4o)   │ │               │
-│                                      │ └─────────────┘ │               │
-│                                      │                 │               │
-│                                      │ Input Prompt:   │               │
-│                                      │ • Price summary │               │
-│                                      │ • Research data │               │
-│                                      │ • News digest   │               │
-│                                      │ • Exec style    │               │
-│                                      │                 │               │
-│                                      │ Output:         │               │
-│                                      │ • direction     │               │
-│                                      │ • position_size │               │
-│                                      │ • leverage      │               │
-│                                      │ • entry/TP/SL   │               │
-│                                      └────────┬────────┘               │
-│                                               │                         │
-│                                               ▼                         │
-│                                      ┌─────────────────┐               │
-│                                      │  RISK MANAGER   │               │
-│                                      │                 │               │
-│                                      │ Checks:         │               │
-│                                      │ • Max leverage  │               │
-│                                      │ • Position size │               │
-│                                      │ • Margin safety │               │
-│                                      │ • VaR limits    │               │
-│                                      │                 │               │
-│                                      │ Verdict:        │               │
-│                                      │ ✅ pass         │               │
-│                                      │ ⚠️ soft_fail    │               │
-│                                      │ ❌ hard_fail    │               │
-│                                      └────────┬────────┘               │
-│                                               │                         │
-│                          ┌────────────────────┴───────────────┐        │
-│                          │                                    │        │
-│                     [pass/soft_fail]                    [hard_fail]    │
-│                          │                                    │        │
-│                          ▼                                    ▼        │
-│                 ┌─────────────────┐                  ┌──────────────┐  │
-│                 │ EXECUTE ORDER   │                  │ ABORT ORDER  │  │
-│                 │                 │                  │              │  │
-│                 │ • Paper/Live    │                  │ Log reason   │  │
-│                 │ • Bybit API     │                  │ No execution │  │
-│                 └────────┬────────┘                  └──────────────┘  │
-│                          │                                             │
-│                          ▼                                             │
-│                 ┌─────────────────┐                                    │
-│                 │ EVALUATOR AGENT │                                    │
-│                 │                 │                                    │
-│                 │ Metrics:        │                                    │
-│                 │ • Sharpe ratio  │                                    │
-│                 │ • PnL           │                                    │
-│                 │ • Hit rate      │                                    │
-│                 │ • Max drawdown  │                                    │
-│                 │ • Calibration   │                                    │
-│                 └─────────────────┘                                    │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-### News Processing Workflow
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       NEWS PROCESSING WORKFLOW                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  STEP 1: QUERY GENERATION                                              │
-│  ════════════════════════                                              │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ Asset-Specific Query Templates (multi_asset_queries.py)  │          │
-│  │                                                          │          │
-│  │  BTC Micro Queries:                                      │          │
-│  │  ├── "Bitcoin spot ETF inflows outflows today"          │          │
-│  │  ├── "Bitcoin whale wallet movements"                   │          │
-│  │  ├── "Bitcoin mining hash rate difficulty"              │          │
-│  │  └── "BTC price technical analysis support resistance"  │          │
-│  │                                                          │          │
-│  │  BTC Macro Queries:                                      │          │
-│  │  ├── "Federal Reserve interest rate decision"           │          │
-│  │  ├── "US inflation CPI data release"                    │          │
-│  │  └── "Cryptocurrency regulation news"                   │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                              │                                          │
-│                              ▼                                          │
-│  STEP 2: SEARCH EXECUTION                                              │
-│  ════════════════════════                                              │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ Bocha Search API (search_bocha.py)                       │          │
-│  │                                                          │          │
-│  │  Request:                                                │          │
-│  │  ├── query: "Bitcoin spot ETF..."                       │          │
-│  │  ├── freshness: "oneWeek"                               │          │
-│  │  ├── count: 20                                          │          │
-│  │  └── summary: true                                      │          │
-│  │                                                          │          │
-│  │  Response:                                               │          │
-│  │  ├── title: "BlackRock ETF sees $500M inflow"           │          │
-│  │  ├── summary: "Institutional demand..."                 │          │
-│  │  ├── url: "https://..."                                 │          │
-│  │  ├── siteName: "Bloomberg"                              │          │
-│  │  └── datePublished: "2025-12-18T10:30:00Z"              │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                              │                                          │
-│                              ▼                                          │
-│  STEP 3: SOURCE CREDIBILITY                                            │
-│  ══════════════════════════                                            │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ Source Tiers (sources.py)                                │          │
-│  │                                                          │          │
-│  │  Tier 1 (weight=1.0): High credibility                  │          │
-│  │  ├── bloomberg.com, reuters.com, wsj.com                │          │
-│  │  ├── coindesk.com, theblock.co, cointelegraph.com       │          │
-│  │  └── sec.gov, federalreserve.gov                        │          │
-│  │                                                          │          │
-│  │  Tier 2 (weight=0.7): Medium credibility                │          │
-│  │  ├── decrypt.co, bitcoinmagazine.com                    │          │
-│  │  └── cryptoslate.com, newsbtc.com                       │          │
-│  │                                                          │          │
-│  │  Tier 3 (weight=0.4): Lower credibility                 │          │
-│  │  └── Unknown/unranked sources                           │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                              │                                          │
-│                              ▼                                          │
-│  STEP 4: LLM ENRICHMENT                                                │
-│  ══════════════════════                                                │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ News Enrichment (enrichment.py)                          │          │
-│  │                                                          │          │
-│  │  Input: Raw article                                      │          │
-│  │  ├── title: "BlackRock ETF sees $500M inflow"           │          │
-│  │  └── summary: "Institutional demand continues..."       │          │
-│  │                                                          │          │
-│  │  LLM Extraction (GPT-4o-mini):                          │          │
-│  │  ├── sentiment: "bullish" (0.7)                         │          │
-│  │  ├── event_type: "etf_flow"                             │          │
-│  │  ├── entities: ["BlackRock", "BTC"]                     │          │
-│  │  ├── impact_timeframe: "short"                          │          │
-│  │  ├── confidence: 0.85                                   │          │
-│  │  └── key_facts: ["$500M inflow", "institutional"]       │          │
-│  │                                                          │          │
-│  │  Output: EnrichedNewsItem                               │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                              │                                          │
-│                              ▼                                          │
-│  STEP 5: AGGREGATION                                                   │
-│  ═══════════════════                                                   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ News Aggregation (aggregation.py)                        │          │
-│  │                                                          │          │
-│  │  Clustering (by event_type):                            │          │
-│  │  ├── Cluster 1: ETF flows (5 articles)                  │          │
-│  │  │   └── Narrative: "Strong institutional inflows"      │          │
-│  │  ├── Cluster 2: Regulation (3 articles)                 │          │
-│  │  │   └── Narrative: "SEC review ongoing"                │          │
-│  │  └── Cluster 3: Price analysis (7 articles)             │          │
-│  │      └── Narrative: "Technical breakout expected"       │          │
-│  │                                                          │          │
-│  │  Final Digest:                                           │          │
-│  │  ├── sentiment_score: +0.35                             │          │
-│  │  ├── overall_sentiment: "bullish"                       │          │
-│  │  ├── dominant_narratives: [...]                         │          │
-│  │  ├── key_events: [...]                                  │          │
-│  │  └── asset_sentiment: {BTC: +0.4, ETH: +0.2, ...}       │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Admin & Monitoring Workflow
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    ADMIN & MONITORING WORKFLOW                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  EVENT BUS (Central Communication)                                      │
-│  ═════════════════════════════════                                      │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │                       EVENT BUS                          │          │
-│  │                                                          │          │
-│  │  Publishers:                    Subscribers:             │          │
-│  │  ├── WorkflowEngine ──────────▶ AdminAgent              │          │
-│  │  ├── OrderManager ────────────▶ AlertsEngine            │          │
-│  │  ├── PositionTracker ─────────▶ ReportGenerator         │          │
-│  │  └── RiskManager ─────────────▶ NotificationService     │          │
-│  │                                                          │          │
-│  │  Event Types:                                            │          │
-│  │  ├── trade_signal    │ order_executed  │ pnl_update     │          │
-│  │  ├── risk_breach     │ drawdown_alert  │ system_health  │          │
-│  │  └── iteration_complete │ error │ warning               │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                              │                                          │
-│              ┌───────────────┼───────────────┐                         │
-│              │               │               │                         │
-│              ▼               ▼               ▼                         │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐               │
-│  │ ALERT RULES  │   │   REPORTS    │   │NOTIFICATIONS │               │
-│  │              │   │              │   │              │               │
-│  │ Conditions:  │   │ Scheduled:   │   │ Channels:    │               │
-│  │ • MaxDD >10% │   │ • Daily 8AM  │   │ • Console    │               │
-│  │ • DailyLoss  │   │ • Weekly Mon │   │ • Slack      │               │
-│  │ • RiskBreach │   │              │   │ • File log   │               │
-│  │ • LowSharpe  │   │ On-demand:   │   │ • Email      │               │
-│  │ • Position   │   │ • Performance│   │              │               │
-│  │   Concentr.  │   │ • Custom     │   │              │               │
-│  └──────┬───────┘   └──────┬───────┘   └──────────────┘               │
-│         │                  │                    ▲                      │
-│         │                  │                    │                      │
-│         ▼                  ▼                    │                      │
-│  ┌─────────────────────────────────────────────┴──┐                   │
-│  │                  ADMIN AGENT                    │                   │
-│  │                                                 │                   │
-│  │  Responsibilities:                              │                   │
-│  │  ├── Monitor all events from EventBus          │                   │
-│  │  ├── Evaluate alert conditions                 │                   │
-│  │  ├── Trigger notifications on breaches         │                   │
-│  │  ├── Generate scheduled reports                │                   │
-│  │  └── Track system health metrics               │                   │
-│  │                                                 │                   │
-│  │  Alert Flow:                                    │                   │
-│  │  Event ──▶ Check Rules ──▶ If triggered ──▶ Notify                 │
-│  │                                                 │                   │
-│  │  Report Flow:                                   │                   │
-│  │  Schedule ──▶ Collect Metrics ──▶ Generate ──▶ Send               │
-│  └─────────────────────────────────────────────────┘                   │
-│                                                                         │
-│  PAPER TRADING FLOW                                                    │
-│  ══════════════════                                                    │
-│                                                                         │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐           │
-│  │ Trade Signal │────▶│OrderManager  │────▶│ Bybit API    │           │
-│  │              │     │              │     │ (Testnet)    │           │
-│  │ direction    │     │ • validate   │     │              │           │
-│  │ size         │     │ • submit     │     │ • place_order│           │
-│  │ leverage     │     │ • track      │     │ • get_pos    │           │
-│  │ TP/SL        │     │ • confirm    │     │ • get_bal    │           │
-│  └──────────────┘     └──────┬───────┘     └──────────────┘           │
-│                              │                                          │
-│                              ▼                                          │
-│                     ┌──────────────┐                                   │
-│                     │PositionTrack │                                   │
-│                     │              │                                   │
-│                     │ • Open pos   │                                   │
-│                     │ • Unrealized │                                   │
-│                     │   PnL        │                                   │
-│                     │ • Emit events│                                   │
-│                     └──────────────┘                                   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Optimization & Learning Workflow
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                   OPTIMIZATION & LEARNING WORKFLOW                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  PERFORMANCE TRACKING                                                   │
-│  ════════════════════                                                   │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ After each iteration:                                    │          │
-│  │                                                          │          │
-│  │  Evaluator Agent ──▶ PerformanceTracker                 │          │
-│  │                                                          │          │
-│  │  Metrics Collected:                                      │          │
-│  │  ├── Trade results (win/loss, PnL)                      │          │
-│  │  ├── Per-method performance                             │          │
-│  │  ├── Agent-level scores                                 │          │
-│  │  └── System-wide metrics                                │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                              │                                          │
-│                              ▼                                          │
-│  KNOWLEDGE TRANSFER (Every N iterations)                               │
-│  ═══════════════════════════════════════                               │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ KnowledgeTransfer Module                                 │          │
-│  │                                                          │          │
-│  │  Step 1: Collect agent experiences                      │          │
-│  │  ├── Analyst: Which features predicted well?            │          │
-│  │  ├── Researcher: Which forecasts were accurate?         │          │
-│  │  ├── Trader: Which styles worked in what conditions?    │          │
-│  │  └── Risk: Which checks prevented bad trades?           │          │
-│  │                                                          │          │
-│  │  Step 2: Cross-agent insights                           │          │
-│  │  ├── Analyst features → Researcher calibration          │          │
-│  │  ├── Risk patterns → Trader position sizing             │          │
-│  │  └── Evaluator feedback → All agents                    │          │
-│  │                                                          │          │
-│  │  Step 3: Update agent parameters                        │          │
-│  │  └── Store in shared knowledge base                     │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                              │                                          │
-│                              ▼                                          │
-│  INVENTORY PRUNING (Every M iterations)                                │
-│  ══════════════════════════════════════                                │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ InventoryPruner Module                                   │          │
-│  │                                                          │          │
-│  │  For each agent's inventory methods:                    │          │
-│  │                                                          │          │
-│  │  ┌─────────────────────────────────────────────┐        │          │
-│  │  │ Method: ARIMAX_Forecast                     │        │          │
-│  │  │ Usage count: 150                            │        │          │
-│  │  │ Success rate: 0.62                          │        │          │
-│  │  │ Avg return: +0.8%                           │        │          │
-│  │  │ Status: ✅ KEEP                             │        │          │
-│  │  └─────────────────────────────────────────────┘        │          │
-│  │                                                          │          │
-│  │  ┌─────────────────────────────────────────────┐        │          │
-│  │  │ Method: Experimental_Strategy_X             │        │          │
-│  │  │ Usage count: 10                             │        │          │
-│  │  │ Success rate: 0.35                          │        │          │
-│  │  │ Avg return: -1.2%                           │        │          │
-│  │  │ Status: ❌ PRUNE (low usage + poor perf)    │        │          │
-│  │  └─────────────────────────────────────────────┘        │          │
-│  │                                                          │          │
-│  │  Pruning criteria:                                       │          │
-│  │  ├── Usage count < threshold AND                        │          │
-│  │  └── Performance < min_score                            │          │
-│  └──────────────────────────────────────────────────────────┘          │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+Iteration N:
+│
+├── 1. Sample Pipeline Combinations
+│   └── Up to 25 (analyst, researcher, trader, risk) tuples
+│
+├── 2. Evaluate Each Pipeline
+│   └── Run full trading simulation → PnL result
+│
+├── 3. Score Agents
+│   ├── Individual performance (Sharpe, PnL, hit rate)
+│   ├── Pipeline contribution (Shapley values)
+│   └── Diversity bonus
+│
+├── 4. Knowledge Transfer (every N iterations)
+│   └── Best agent → Other agents (soft update τ=0.1)
+│
+├── 5. Diversity Preservation
+│   └── If diversity < threshold → Mutate non-elite agents
+│
+└── 6. Record Results
+    └── Update population scores, history
 ```
 
 ---
@@ -703,62 +279,44 @@ System monitoring and reporting:
    * Bybit perpetual futures data with derivative features
    * Cross-asset market context (8 signals)
    * Per-coin and multi-asset configuration files
-   * Updated project structure for multi-coin trading
 * (2025.12.19) **Admin Agent & Paper Trading v0.4.0**
    * Admin Agent with automated reporting and alerting
    * Event bus system for system-wide communication
-   * Alert rules: max drawdown, daily loss, risk breaches, Sharpe warnings
-   * Scheduled reports: daily summary, weekly summary, performance reports
    * Bybit Testnet integration for paper trading validation
-   * Order manager with position tracking
-   * Slack/console/file notification channels
 * (2025.12.19) **Bocha Search Integration v0.4.1**
-   * Replaced expensive SerpAPI with Bocha Search API
-   * Bocha provides better Chinese/global web search at lower cost
-   * Supports time-based freshness filtering (oneDay, oneWeek, oneMonth)
-   * ISO date parsing for reliable date filtering
-* (2025.12.19) **Enhanced News Intelligence v0.4.2**
-   * Multi-asset query templates for asset-specific news
-   * Source credibility scoring (tier-1, tier-2, tier-3)
-   * LLM-based news enrichment (sentiment, events, entities, impact)
-   * News clustering and aggregation for market digest
-   * Enhanced trader prompt with structured news integration
+   * Replaced SerpAPI with Bocha Search API
+   * LLM-based news enrichment and aggregation
+* (2025.12.19) **Population-Based Learning v0.5.0** 🆕
+   * 5 agent variants per role (Analyst, Researcher, Trader, Risk)
+   * Knowledge transfer strategies (Soft Update, Distillation, Selective)
+   * Diversity preservation with mutation
+   * Shapley-based credit assignment for fair scoring
+   * PopulationWorkflow engine for evolutionary learning
 
 ---
 
 ## 🎯 Next (NeurIPS 2026 Target)
 
+### Research Contribution
+- **Novel Framework**: Population-based continual learning for multi-agent LLM trading
+- **Key Innovation**: Heterogeneous agent populations that co-evolve
+- **Technical Depth**: Shapley values for credit assignment, conformal calibration
+
 ### Experimental Validation
 - Run backtesting on 2-year data (4h intervals) for all 5 coins
-- Validate: Aug 2024, Test: Sep-Dec 2024
-- Ablation studies: with/without cross-asset features, with/without risk manager
+- Compare: Single-agent vs Population-based (5 variants)
+- Ablation: With/without knowledge transfer, with/without diversity preservation
 
 ### Benchmark Comparisons
-- Compare against [Alpha Arena](https://alpha-arena.com) baselines
-- Evaluate LLMs: GPT-4, DeepSeek, Claude on decision quality
-- Measure cross-asset vs single-asset performance
+- GPT-4 vs DeepSeek vs Claude on decision quality
+- Population learning vs static best-agent
 
-### Paper Contributions
-- Multi-agent orchestration for algorithmic trading
-- Cross-asset market context features
-- Continual learning and inventory pruning
-- Risk-aware execution with LLM reasoning
-
-### Technical Improvements
-- ~~Add Admin Agent for automated reporting~~ ✅ Done
-- ~~Real-time paper trading validation~~ ✅ Done
-- ~~Extend to more assets (AVAX, LINK, etc.)~~ ✅ Done (5 coins)
-- ~~Enhanced news intelligence pipeline~~ ✅ Done
-- WebSocket real-time feeds for live trading
-- Email notifications for critical alerts
-- Backtesting engine improvements
-
----
-
-## ✨ Related Repositories
-
-* TradingAgents Enhanced Chinese Edition: [TradingAgents-CN](https://github.com/your-repo/TradingAgents-CN)
-* TradingAgents Original by Tauric Research: [TradingAgents](https://github.com/tauric-research/TradingAgents)
+### Paper Structure
+1. Introduction: Problem of brittle LLM agent architectures
+2. Method: Population-based continual learning framework
+3. Experiments: Crypto trading on 5 assets
+4. Analysis: What knowledge transfers? Emergent specialization?
+5. Conclusion: Evolving agent populations outperform fixed architectures
 
 ---
 
@@ -771,6 +329,13 @@ data:
   symbols: [BTC, ETH, SOL, DOGE, XRP]
   bybit_csv_dir: "data/bybit"
   add_cross_features: true
+
+population:
+  enabled: true
+  size: 5
+  transfer_frequency: 10
+  transfer_tau: 0.1
+  diversity_weight: 0.1
 ```
 
 ### Single-Asset (configs/single/btc.yaml)
@@ -806,6 +371,13 @@ data/bybit/
 
 ---
 
+## ✨ Related Work
+
+* TradingAgents by Tauric Research: [TradingAgents](https://github.com/tauric-research/TradingAgents)
+* Population-Based Training: [PBT Paper](https://arxiv.org/abs/1711.09846)
+
+---
+
 ## License & Attribution
 
-This implementation borrows design patterns from **TradingAgents** and **TradingAgents-CN** (Apache-2.0). See their repositories for details.
+This implementation borrows design patterns from **TradingAgents** (Apache-2.0). See their repository for details.
