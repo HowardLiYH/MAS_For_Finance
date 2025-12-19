@@ -6,22 +6,24 @@ This directory contains YAML configuration files for the multi-agent trading sys
 
 ```
 configs/
-├── multi_asset.yaml      # 5-coin trading with cross-asset features (RECOMMENDED)
-├── default.yaml          # Default single-asset configuration
-├── single/               # Individual coin configs for backtesting
-│   ├── btc.yaml
-│   ├── eth.yaml
-│   ├── sol.yaml
-│   ├── doge.yaml
-│   └── xrp.yaml
-└── news_urls.txt         # Candidate URLs for news search
+├── multi_asset.yaml      # 5-coin trading with cross-asset features (DEFAULT)
+└── single/               # Individual coin configs for backtesting
+    ├── btc.yaml
+    ├── eth.yaml
+    ├── sol.yaml
+    ├── doge.yaml
+    └── xrp.yaml
 ```
 
 ## Usage
 
-### Multi-Asset Mode (Recommended)
+### Multi-Asset Mode (Default)
 Trade all 5 coins with cross-asset market intelligence:
 ```bash
+# Uses multi_asset.yaml by default
+trading-agents multi
+
+# Or explicitly specify
 trading-agents multi --config configs/multi_asset.yaml
 ```
 
@@ -30,6 +32,9 @@ Trade a single coin:
 ```bash
 trading-agents run --config configs/single/btc.yaml
 trading-agents run --config configs/single/eth.yaml
+trading-agents run --config configs/single/sol.yaml
+trading-agents run --config configs/single/doge.yaml
+trading-agents run --config configs/single/xrp.yaml
 ```
 
 ## Configuration Sections
@@ -76,4 +81,4 @@ Configure inventory methods for each agent type:
 | SOL | Solana | `single/sol.yaml` |
 | DOGE | Dogecoin | `single/doge.yaml` |
 | XRP | Ripple | `single/xrp.yaml` |
-| MULTI | All 5 coins | `multi_asset.yaml` |
+| ALL | All 5 coins | `multi_asset.yaml` |

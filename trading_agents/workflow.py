@@ -47,7 +47,7 @@ except ImportError:
     run_multi_asset_pipeline = None
     run_pipeline_auto = None
 
-DEFAULT_CONFIG_PATH = ROOT / "configs" / "default.yaml"
+DEFAULT_CONFIG_PATH = ROOT / "configs" / "multi_asset.yaml"
 
 
 def _normalize_symbol(symbol: str) -> str:
