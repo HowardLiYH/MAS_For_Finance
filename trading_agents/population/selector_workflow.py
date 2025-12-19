@@ -62,7 +62,7 @@ class PipelineResult:
     sharpe: float
     success: bool
     timestamp: datetime = field(default_factory=datetime.now)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "agents": {
@@ -84,7 +84,7 @@ class PipelineResult:
         }
 
 
-@dataclass 
+@dataclass
 class IterationSummary:
     """Summary of one iteration."""
     iteration: int
@@ -99,7 +99,7 @@ class IterationSummary:
 class SelectorWorkflow:
     """
     Main workflow engine for PopAgent with method selection.
-    
+
     Each iteration:
     1. Agents select methods from inventory
     2. Sample pipeline combinations
@@ -108,10 +108,10 @@ class SelectorWorkflow:
     5. Transfer knowledge from best performers
     6. Ensure selection diversity
     """
-    
+
     def __init__(self, config: Optional[SelectorWorkflowConfig] = None):
         self.config = config or SelectorWorkflowConfig()
-        
+
         # Create populations for each role
         self.analyst_pop = SelectorPopulation(SelectorPopulationConfig(
             role=AgentRole.ANALYST,
@@ -123,7 +123,7 @@ class SelectorWorkflow:
             transfer_frequency=self.config.transfer_frequency,
             transfer_tau=self.config.transfer_tau,
         ))
-        
+
         self.researcher_pop = SelectorPopulation(SelectorPopulationConfig(
             role=AgentRole.RESEARCHER,
             inventory=RESEARCHER_INVENTORY,
@@ -134,7 +134,7 @@ class SelectorWorkflow:
             transfer_frequency=self.config.transfer_frequency,
             transfer_tau=self.config.transfer_tau,
         ))
-        
+
         self.trader_pop = SelectorPopulation(SelectorPopulationConfig(
             role=AgentRole.TRADER,
             inventory=TRADER_INVENTORY,
@@ -145,7 +145,7 @@ class SelectorWorkflow:
             transfer_frequency=self.config.transfer_frequency,
             transfer_tau=self.config.transfer_tau,
         ))
-        
+
         self.risk_pop = SelectorPopulation(SelectorPopulationConfig(
             role=AgentRole.RISK,
             inventory=RISK_INVENTORY,
@@ -156,19 +156,19 @@ class SelectorWorkflow:
             transfer_frequency=self.config.transfer_frequency,
             transfer_tau=self.config.transfer_tau,
         ))
-        
+
         self.populations = {
             AgentRole.ANALYST: self.analyst_pop,
             AgentRole.RESEARCHER: self.researcher_pop,
             AgentRole.TRADER: self.trader_pop,
             AgentRole.RISK: self.risk_pop,
         }
-        
+
         # History
         self.iteration = 0
         self.history: List[IterationSummary] = []
         self.all_results: List[PipelineResult] = []
-    
+
     def run_iteration(
         self,
         price_data: pd.DataFrame,
@@ -180,35 +180,35 @@ class SelectorWorkflow:
         """
         self.iteration += 1
         context = market_context or {}
-        
+
         # 1. Each agent selects methods
         for pop in self.populations.values():
             for agent in pop.agents:
                 agent.select_methods(context)
-        
+
         # 2. Sample pipeline combinations
         pipelines = self._sample_pipelines()
-        
+
         # 3. Evaluate each pipeline
         results: List[PipelineResult] = []
         for pipeline in pipelines:
             result = self._evaluate_pipeline(pipeline, price_data, context, news_digest)
             if result:
                 results.append(result)
-        
+
         # 4. Update agent preferences based on outcomes
         self._update_preferences(results, context)
-        
+
         # 5. Score agents and transfer knowledge
         self._score_and_transfer()
-        
+
         # 6. Ensure diversity
         for pop in self.populations.values():
             pop.ensure_diversity()
-        
+
         # Create summary
         best_result = max(results, key=lambda r: r.pnl) if results else None
-        
+
         summary = IterationSummary(
             iteration=self.iteration,
             best_pnl=best_result.pnl if best_result else 0.0,
@@ -225,22 +225,22 @@ class SelectorWorkflow:
             },
             transfer_performed=self.analyst_pop.should_transfer(),
         )
-        
+
         self.history.append(summary)
         self.all_results.extend(results)
-        
+
         return summary
-    
+
     def _sample_pipelines(self) -> List[Dict[str, MethodSelector]]:
         """Sample pipeline combinations of agents."""
         analysts = self.analyst_pop.agents
         researchers = self.researcher_pop.agents
         traders = self.trader_pop.agents
         risks = self.risk_pop.agents
-        
+
         # All possible combinations
         all_combos = list(product(analysts, researchers, traders, risks))
-        
+
         # Sample if too many
         if len(all_combos) > self.config.max_pipeline_samples:
             # Include best agents
@@ -250,13 +250,13 @@ class SelectorWorkflow:
                 self.trader_pop.get_best() or traders[0],
                 self.risk_pop.get_best() or risks[0],
             )
-            
+
             sampled = random.sample(
                 [c for c in all_combos if c != elite_combo],
                 self.config.max_pipeline_samples - 1
             )
             all_combos = [elite_combo] + sampled
-        
+
         return [
             {
                 "analyst": combo[0],
@@ -266,7 +266,7 @@ class SelectorWorkflow:
             }
             for combo in all_combos
         ]
-    
+
     def _evaluate_pipeline(
         self,
         pipeline: Dict[str, MethodSelector],
@@ -280,16 +280,16 @@ class SelectorWorkflow:
             researcher = pipeline["researcher"]
             trader = pipeline["trader"]
             risk = pipeline["risk"]
-            
+
             # Get selected methods
             analyst_methods = analyst.current_selection
             researcher_methods = researcher.current_selection
             trader_methods = trader.current_selection
             risk_methods = risk.current_selection
-            
+
             # Simulate pipeline execution
             # In real implementation, this would call actual method implementations
-            
+
             # For now, simulate based on method characteristics
             pnl = self._simulate_pipeline_pnl(
                 analyst_methods,
@@ -299,10 +299,10 @@ class SelectorWorkflow:
                 price_data,
                 context,
             )
-            
+
             # Calculate Sharpe approximation
             sharpe = pnl / 0.02 if pnl != 0 else 0.0  # Rough approximation
-            
+
             return PipelineResult(
                 analyst_id=analyst.id,
                 researcher_id=researcher.id,
@@ -316,11 +316,11 @@ class SelectorWorkflow:
                 sharpe=sharpe,
                 success=pnl > 0,
             )
-            
+
         except Exception as e:
             print(f"Pipeline evaluation error: {e}")
             return None
-    
+
     def _simulate_pipeline_pnl(
         self,
         analyst_methods: List[str],
@@ -332,7 +332,7 @@ class SelectorWorkflow:
     ) -> float:
         """
         Simulate PnL based on method selection.
-        
+
         In production, this would actually execute the methods.
         For research, we can use historical performance or learned simulators.
         """
@@ -343,43 +343,43 @@ class SelectorWorkflow:
             )
         else:
             price_return = np.random.normal(0, 0.01)
-        
+
         # Method synergy bonuses (some combinations work better)
         synergy = 0.0
-        
+
         # Analyst synergies
         if "HMM_Regime" in analyst_methods and "VolatilityClustering" in analyst_methods:
             synergy += 0.002  # Regime + volatility work well together
         if "RSI" in analyst_methods and "MACD" in analyst_methods:
             synergy += 0.001  # Classic combo
-        
+
         # Researcher synergies
         if "BootstrapEnsemble" in researcher_methods or "QuantileRegression" in researcher_methods:
             synergy += 0.001  # Uncertainty helps
         if "TemporalFusion" in researcher_methods:
             synergy += 0.002  # Advanced model bonus
-        
+
         # Trader synergies
         if "VolatilityScaled" in trader_methods and "KellyCriterion" in trader_methods:
             synergy += 0.001  # Good sizing combo
-        
+
         # Risk protection
         risk_penalty = 0.0
         if "MaxDrawdown" not in risk_methods and "DailyStopLoss" not in risk_methods:
             risk_penalty = 0.005  # No stop loss is risky
-        
+
         # Context-aware bonuses
         trend = context.get("trend", "neutral")
         if trend == "bullish" and "MomentumEntry" in trader_methods:
             synergy += 0.002
         if trend == "bearish" and "ContrarianEntry" in trader_methods:
             synergy += 0.001
-        
+
         # Final PnL
         pnl = price_return + synergy - risk_penalty + np.random.normal(0, 0.005)
-        
+
         return pnl
-    
+
     def _update_preferences(
         self,
         results: List[PipelineResult],
@@ -388,38 +388,38 @@ class SelectorWorkflow:
         """Update agent preferences based on pipeline results."""
         # Group results by agent
         agent_outcomes: Dict[str, List[Tuple[List[str], float]]] = {}
-        
+
         for result in results:
             # Analyst
             key = f"analyst:{result.analyst_id}"
             if key not in agent_outcomes:
                 agent_outcomes[key] = []
             agent_outcomes[key].append((result.analyst_methods, result.pnl))
-            
+
             # Researcher
             key = f"researcher:{result.researcher_id}"
             if key not in agent_outcomes:
                 agent_outcomes[key] = []
             agent_outcomes[key].append((result.researcher_methods, result.pnl))
-            
+
             # Trader
             key = f"trader:{result.trader_id}"
             if key not in agent_outcomes:
                 agent_outcomes[key] = []
             agent_outcomes[key].append((result.trader_methods, result.pnl))
-            
+
             # Risk
             key = f"risk:{result.risk_id}"
             if key not in agent_outcomes:
                 agent_outcomes[key] = []
             agent_outcomes[key].append((result.risk_methods, result.pnl))
-        
+
         # Update each agent
         for key, outcomes in agent_outcomes.items():
             role, agent_id = key.split(":")
             pop = self.populations[AgentRole(role)]
             agent = pop.get_agent(agent_id)
-            
+
             if agent:
                 for methods, pnl in outcomes:
                     agent.update_from_outcome(SelectionOutcome(
@@ -427,7 +427,7 @@ class SelectorWorkflow:
                         reward=pnl,
                         market_context=context,
                     ))
-    
+
     def _score_and_transfer(self) -> None:
         """Score agents and perform knowledge transfer if needed."""
         for role, pop in self.populations.items():
@@ -440,13 +440,13 @@ class SelectorWorkflow:
                     scores[agent.id] = avg_reward
                 else:
                     scores[agent.id] = 0.0
-            
+
             pop.update_scores(scores)
-            
+
             # Transfer if it's time
             if pop.should_transfer():
                 pop.transfer_knowledge()
-    
+
     def get_best_methods(self) -> Dict[str, List[str]]:
         """Get the currently best method selection for each role."""
         result = {}
@@ -457,7 +457,7 @@ class SelectorWorkflow:
             else:
                 result[role.value] = []
         return result
-    
+
     def get_method_popularity(self) -> Dict[str, Dict[str, float]]:
         """Get how popular each method is across the population."""
         result = {}
@@ -466,14 +466,14 @@ class SelectorWorkflow:
             total = sum(usage.values()) or 1
             result[role.value] = {m: c / total for m, c in usage.items()}
         return result
-    
+
     def get_learning_progress(self) -> Dict[str, Any]:
         """Get learning progress metrics."""
         if not self.history:
             return {"message": "No history yet"}
-        
+
         pnls = [h.best_pnl for h in self.history]
-        
+
         return {
             "iterations": len(self.history),
             "avg_pnl_first_10": np.mean(pnls[:10]) if len(pnls) >= 10 else np.mean(pnls),
@@ -482,7 +482,7 @@ class SelectorWorkflow:
             "best_methods": self.get_best_methods(),
             "method_popularity": self.get_method_popularity(),
         }
-    
+
     def get_summary(self) -> Dict[str, Any]:
         """Get comprehensive summary."""
         return {
@@ -519,4 +519,3 @@ def create_selector_workflow(
         **kwargs
     )
     return SelectorWorkflow(config)
-

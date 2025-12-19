@@ -97,7 +97,7 @@ Examples:
 
     # Selector (PopAgent) command
     selector_parser = subparsers.add_parser(
-        "selector", 
+        "selector",
         help="Run PopAgent with adaptive method selection"
     )
     selector_parser.add_argument(
@@ -239,27 +239,27 @@ def _run_selector_mode(args):
         SelectorWorkflowConfig,
         get_inventory_sizes,
     )
-    
+
     print(f"\n{'='*60}")
     print("🧬 POPAGENT: ADAPTIVE METHOD SELECTION")
     print(f"{'='*60}")
-    
+
     # Show inventory sizes
     inv_sizes = get_inventory_sizes()
     print("\nMethod Inventories:")
     for role, size in inv_sizes.items():
         print(f"  {role.capitalize()}: {size} methods (agents select {args.max_methods})")
-    
+
     # Create workflow
     config = SelectorWorkflowConfig(
         population_size=args.population_size,
         max_methods_per_agent=args.max_methods,
     )
     workflow = SelectorWorkflow(config)
-    
+
     print(f"\nPopulation: {args.population_size} agents per role")
     print(f"Running {args.iterations} iterations...\n")
-    
+
     # Run iterations
     for i in range(args.iterations):
         # Create dummy price data for demo
@@ -270,32 +270,32 @@ def _run_selector_mode(args):
             "close": [100.5 + i * 0.1],
             "volume": [1000000],
         })
-        
+
         # Simulate market context
         context = {
             "trend": "bullish" if i % 3 != 0 else "bearish",
             "volatility": 0.3 + (i % 5) * 0.1,
             "regime": "normal" if i % 4 != 0 else "volatile",
         }
-        
+
         summary = workflow.run_iteration(price_data, context)
-        
+
         print(f"Iteration {summary.iteration}: "
               f"Best PnL={summary.best_pnl:.4f}, "
               f"Avg PnL={summary.avg_pnl:.4f}, "
               f"Transfer={'✓' if summary.transfer_performed else '-'}")
-    
+
     # Print final summary
     print(f"\n{'='*60}")
     print("LEARNING RESULTS")
     print(f"{'='*60}")
-    
+
     progress = workflow.get_learning_progress()
     print(f"\nImprovement: {progress['improvement']:.4f}")
     print(f"Best methods by role:")
     for role, methods in progress['best_methods'].items():
         print(f"  {role}: {methods}")
-    
+
     print(f"\nMethod popularity:")
     for role, popularity in progress['method_popularity'].items():
         top_methods = sorted(popularity.items(), key=lambda x: x[1], reverse=True)[:3]
@@ -309,18 +309,18 @@ def _run_population_mode(args):
     print(f"{'='*60}")
     print("\n⚠️  This is the legacy approach with fixed agent variants.")
     print("   Use 'selector' command for the new adaptive method selection.\n")
-    
+
     from .population import PopulationWorkflow
-    
+
     workflow = PopulationWorkflow()
-    
+
     for i in range(args.iterations):
         result = workflow.run_iteration(
             price_data=None,  # Would need real data
             market_context={},
         )
         print(f"Iteration {i+1}: {result}")
-    
+
     print("\n[Population Mode Complete]")
 
 

@@ -12,7 +12,7 @@ flowchart TB
             O2["Agent 2: Statistical"] --> |fixed| O2M["Autocorr, Vol"]
             O3["Agent 3: ML"] --> |fixed| O3M["HMM, Kalman"]
         end
-        
+
         subgraph NEW["PopAgent Approach"]
             INV["INVENTORY<br/>(15 methods)"]
             A1["Agent 1"] --> |selects| S1["[RSI, HMM, Wavelet]"]
@@ -23,7 +23,7 @@ flowchart TB
             INV --> A3
         end
     end
-    
+
     subgraph LEARNING["📚 SELECTION LEARNING"]
         UCB["UCB Selection<br/>(exploration + exploitation)"]
         PREF["Preference Update<br/>pref += α × (reward - baseline)"]
@@ -59,7 +59,7 @@ For each agent:
 flowchart TB
     subgraph ITERATION["📍 ONE ITERATION"]
         START([Start]) --> SELECT
-        
+
         subgraph SELECT["1️⃣ METHOD SELECTION"]
             direction LR
             A_INV["Analyst Inventory<br/>(15 methods)"] --> A_AGT["5 Agents select 3 each"]
@@ -67,23 +67,23 @@ flowchart TB
             T_INV["Trader Inventory<br/>(10 methods)"] --> T_AGT["5 Agents select 3 each"]
             K_INV["Risk Inventory<br/>(10 methods)"] --> K_AGT["5 Agents select 3 each"]
         end
-        
+
         SELECT --> SAMPLE["2️⃣ SAMPLE PIPELINES<br/>25 combinations of<br/>(analyst, researcher, trader, risk)"]
-        
+
         SAMPLE --> EVAL["3️⃣ EVALUATE<br/>Run each pipeline<br/>Measure PnL"]
-        
+
         EVAL --> UPDATE["4️⃣ UPDATE PREFERENCES<br/>pref[m] += α × (reward - baseline)<br/>for each method m used"]
-        
+
         UPDATE --> CHECK{"Iteration<br/>% 10 == 0?"}
         CHECK -->|Yes| TRANSFER["5️⃣ TRANSFER<br/>Best agent's preferences<br/>→ Other agents"]
         CHECK -->|No| DIVERS
         TRANSFER --> DIVERS
-        
+
         DIVERS["6️⃣ DIVERSITY CHECK<br/>If selection diversity low<br/>→ Boost exploration"]
-        
+
         DIVERS --> END([Next Iteration])
     end
-    
+
     subgraph PREFERENCES["📊 PREFERENCE UPDATE"]
         direction TB
         M1["Method: RSI"] --> P1["pref: 0.8 ↑"]
@@ -101,15 +101,15 @@ flowchart LR
         UCB["UCB Bonus<br/>√(2 ln(t) / n_method)"]
         CTX["Context Bonus<br/>π_context[method]"]
         NOISE["Exploration Noise<br/>N(0, σ)"]
-        
+
         PREF --> SUM(("+"))
         UCB --> SUM
         CTX --> SUM
         NOISE --> SUM
-        
+
         SUM --> FINAL["Final Score"]
     end
-    
+
     FINAL --> TOPK["Select Top-3<br/>Methods"]
 ```
 

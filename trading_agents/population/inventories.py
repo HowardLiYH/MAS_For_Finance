@@ -26,18 +26,18 @@ ANALYST_INVENTORY = [
     "BollingerBands",         # Bollinger Bands
     "ADX",                    # Average Directional Index
     "Stochastic",             # Stochastic Oscillator
-    
+
     # Statistical Analysis (4)
     "Autocorrelation",        # Lagged correlation analysis
     "VolatilityClustering",   # GARCH-style volatility
     "MeanReversion",          # Mean reversion signals
     "Cointegration",          # Cross-asset cointegration
-    
+
     # Decomposition Methods (3)
     "STL_Decomposition",      # Seasonal-Trend-Loess
     "WaveletTransform",       # Multi-scale analysis
     "FourierAnalysis",        # Frequency domain
-    
+
     # Machine Learning (3)
     "HMM_Regime",             # Hidden Markov Model regimes
     "KalmanFilter",           # State space filtering
@@ -148,13 +148,13 @@ RESEARCHER_INVENTORY = [
     "ExponentialSmoothing",   # Holt-Winters
     "VectorAutoregression",   # VAR for multi-asset
     "GARCH_Forecast",         # Volatility forecasting
-    
+
     # Machine Learning (4)
     "RandomForest",           # Ensemble tree model
     "GradientBoosting",       # XGBoost-style
     "LSTM_Forecast",          # Recurrent neural network
     "TemporalFusion",         # Transformer-based TFT
-    
+
     # Uncertainty Quantification (4)
     "BootstrapEnsemble",      # Bootstrap confidence intervals
     "QuantileRegression",     # Direct quantile estimation
@@ -248,12 +248,12 @@ TRADER_INVENTORY = [
     "PassiveLimit",           # Patient limit orders
     "TWAP",                   # Time-weighted average price
     "VWAP",                   # Volume-weighted average price
-    
+
     # Position Sizing (3)
     "KellyCriterion",         # Optimal fraction betting
     "FixedFractional",        # Fixed percentage per trade
     "VolatilityScaled",       # Size inversely to volatility
-    
+
     # Entry Strategies (3)
     "MomentumEntry",          # Trend-following entries
     "ContrarianEntry",        # Mean-reversion entries
@@ -333,16 +333,16 @@ RISK_INVENTORY = [
     "MaxLeverage",            # Hard leverage cap
     "MaxPositionSize",        # Maximum position as % of capital
     "ConcentrationLimit",     # Single asset concentration
-    
+
     # Loss Limits (3)
     "MaxDrawdown",            # Maximum drawdown before stop
     "DailyStopLoss",          # Daily loss limit
     "TrailingStop",           # Trailing stop loss
-    
+
     # Risk Metrics (2)
     "VaRLimit",               # Value at Risk constraint
     "ExpectedShortfall",      # CVaR / Expected Shortfall
-    
+
     # Dynamic Risk (2)
     "VolatilityAdjusted",     # Adjust limits by volatility
     "RegimeAware",            # Different limits per regime
@@ -456,4 +456,3 @@ def get_inventory_sizes() -> Dict[str, int]:
         "trader": len(TRADER_INVENTORY),
         "risk": len(RISK_INVENTORY),
     }
-
