@@ -323,6 +323,7 @@ class BacktestEngine:
             AgentDecisionLog,
             PipelineResultLog,
             DiversityMetrics,
+            TransferLog,
         )
 
         # Filter price data
@@ -440,6 +441,24 @@ class BacktestEngine:
             # 6. Score and transfer knowledge
             selector_workflow._score_and_transfer()
 
+            # Capture knowledge transfers that just happened
+            transfer_log = None
+            for role, pop in selector_workflow.populations.items():
+                # Check if transfer just happened (iteration is now divisible by frequency)
+                if pop.iteration > 0 and pop.iteration % pop.config.transfer_frequency == 0:
+                    best = pop.get_best()
+                    if best:
+                        transfer_log = TransferLog(
+                            timestamp=current_time.isoformat(),
+                            role=role.value,
+                            source_agent_id=best.id,
+                            target_agent_ids=[a.id for a in pop.agents if a.id != best.id],
+                            transfer_tau=pop.config.transfer_tau,
+                            methods_transferred=best.current_selection,
+                            source_preferences=dict(best.preferences),
+                        )
+                        break  # Log first transfer found
+
             # 7. Ensure diversity
             for pop in selector_workflow.populations.values():
                 pop.ensure_diversity()
@@ -489,7 +508,7 @@ class BacktestEngine:
                     best_pipeline_id=f"pipe_best" if best_result else None,
                     best_pnl=best_result.pnl if best_result else 0.0,
                     avg_pnl=avg_pnl,
-                    knowledge_transfer=None,  # TODO: log transfers
+                    knowledge_transfer=transfer_log,
                     diversity_metrics=diversity_metrics,
                     iteration_duration_ms=iteration_duration_ms,
                 )
@@ -686,6 +705,10 @@ class BacktestEngine:
         all_iteration_results = []
         iteration_pnls = []
 
+        # Track stay-flat decisions (v0.9.1)
+        stayed_flat_count = 0
+        traded_count = 0
+
         # Cross-asset tracking
         correlation_history = []
         btc_dominance_history = []
@@ -740,6 +763,45 @@ class BacktestEngine:
                 news_items = news_items_fn(lookback_start, current_time)
                 news_digest = {"items": news_items, "count": len(news_items)}
 
+            # ====== MODEL PREDICTION (BEFORE trading decision) ======
+            # This MUST happen before we decide whether to trade
+            # v0.9.8: Feature-aligned learning (RECOMMENDED)
+            # v0.9.7: Hybrid learning (deprecated)
+            # v0.9.0: Online-only (legacy)
+            online_signal = "hold"
+            online_confidence = 0.5
+            online_details = {}
+
+            # Create combined dataframe for feature extraction
+            combined_df = self._create_combined_dataframe(historical_data)
+            features = selector_workflow._extract_features(combined_df, market_context)
+            selector_workflow.last_features = features
+
+            # Use feature-aligned learner (v0.9.8) - RECOMMENDED
+            # Update frequency matches FEATURE TIMESCALE, not model complexity!
+            if hasattr(selector_workflow, 'feature_aligned_learner') and selector_workflow.feature_aligned_learner:
+                online_signal, online_confidence, online_details = selector_workflow.feature_aligned_learner.predict(features)
+                online_details["learning_mode"] = "feature_aligned"
+
+            # Fall back to online-only (legacy)
+            elif hasattr(selector_workflow, 'online_models') and selector_workflow.online_models:
+                online_signal, online_confidence, online_details = selector_workflow.online_models.get_combined_signal(features)
+                online_details["learning_mode"] = "online"
+
+            # Add to market context so agents and logging can see it
+            market_context["online_signal"] = online_signal
+            market_context["online_confidence"] = online_confidence
+            market_context["online_regime"] = online_details.get("regime", "Neutral")
+            market_context["online_momentum"] = online_details.get("momentum", 0)
+            market_context["online_adjusted_signal"] = online_details.get("adjusted_signal", 0)
+            market_context["learning_mode"] = online_details.get("learning_mode", "none")
+
+            # Feature-aligned specific: add per-group predictions
+            if online_details.get("learning_mode") == "feature_aligned":
+                market_context["fast_pred"] = online_details.get("fast_pred", 0)
+                market_context["medium_pred"] = online_details.get("medium_pred", 0)
+                market_context["slow_pred"] = online_details.get("slow_pred", 0)
+
             # ====== Run PopAgent Iteration ======
             agent_decisions = []
             for role, pop in selector_workflow.populations.items():
@@ -786,20 +848,45 @@ class BacktestEngine:
                 best_result = max(pipeline_results, key=lambda r: r.pnl)
                 avg_pnl = np.mean([r.pnl for r in pipeline_results])
 
-                # Execute best pipeline for each asset with cross-asset adjustments
-                if best_result.success:
+                # ====== SIMPLIFIED TRADING LOGIC (v0.9.4) ======
+                # The ONLINE MODEL decides whether to trade (signal) - computed above
+                # The TRADER METHODS decide HOW to trade (execution style)
+                #
+                # Key insight: online_signal and online_confidence were computed
+                # BEFORE this block, so we use the values directly (not from context)
+
+                # Simple decision: trade if signal is not "hold"
+                should_stay_flat = (online_signal == "hold")
+
+                # Scale position size by confidence (gradual scaling)
+                # Full size at confidence >= 0.6, reduced below that
+                confidence_multiplier = max(0.3, min(1.0, 0.4 + online_confidence))
+
+                # Log trading decision for debugging
+                if iteration_num <= 5 or iteration_num % 100 == 0:
+                    print(f"  [Iter {iteration_num}] signal={online_signal}, conf={online_confidence:.2f}, "
+                          f"adj_signal={online_details.get('adjusted_signal', 0):.2f}, stay_flat={should_stay_flat}")
+
+                if best_result.success and not should_stay_flat:
+                    traded_count += 1
                     for sym in symbols:
                         # Adjust position based on correlation and per-asset context
                         asset_weight = self._calculate_asset_weight(
                             sym, cross_asset_context, per_asset_context[sym]
                         )
 
-                        if asset_weight > 0.05:  # Only trade if weight is significant
+                        # Apply confidence multiplier to position size
+                        adjusted_weight = asset_weight * confidence_multiplier
+
+                        if adjusted_weight > 0.05:  # Only trade if weight is significant
                             exec_summary = self._create_multi_asset_execution(
-                                best_result, current_bars[sym], current_time, sym, asset_weight
+                                best_result, current_bars[sym], current_time, sym, adjusted_weight
                             )
                             if exec_summary:
                                 asset_executors[sym].submit_order(exec_summary)
+                else:
+                    # Stayed flat - skipped trading
+                    stayed_flat_count += 1
 
                 # Sum PnL across assets
                 for sym in symbols:
@@ -811,9 +898,52 @@ class BacktestEngine:
                 avg_pnl = 0.0
                 iteration_pnls.append(0.0)
 
+            # ====== MODEL UPDATE: Update models with observed return ======
+            # Note: Prediction was already done at the start of this iteration
+            # Here we UPDATE models with the observed outcome (learning happens here!)
+            if bar_idx > 21 and selector_workflow.last_features is not None:
+                # Calculate actual return from this bar
+                primary_sym = "BTC" if "BTC" in symbols else symbols[0]
+                prev_close = aligned_data[primary_sym].iloc[bar_idx - 1]["close"]
+                curr_close = current_bars[primary_sym]["close"]
+                actual_return = (curr_close / prev_close) - 1.0
+
+                # Update feature-aligned learner (v0.9.8) - RECOMMENDED
+                # Each feature group updates at its natural timescale!
+                if hasattr(selector_workflow, 'feature_aligned_learner') and selector_workflow.feature_aligned_learner:
+                    selector_workflow.feature_aligned_learner.update(
+                        selector_workflow.last_features,
+                        actual_return
+                    )
+                # Fall back to online-only (legacy)
+                elif hasattr(selector_workflow, 'online_models') and selector_workflow.online_models:
+                    selector_workflow.online_models.update_all(
+                        selector_workflow.last_features,
+                        actual_return
+                    )
+
             # Update preferences and transfer knowledge
             selector_workflow._update_preferences(pipeline_results, market_context)
             selector_workflow._score_and_transfer()
+
+            # Capture knowledge transfers that just happened
+            transfer_log = None
+            for role, pop in selector_workflow.populations.items():
+                # Check if transfer just happened (iteration is now divisible by frequency)
+                if pop.iteration > 0 and pop.iteration % pop.config.transfer_frequency == 0:
+                    best = pop.get_best()
+                    if best:
+                        from ..services.experiment_logger import TransferLog
+                        transfer_log = TransferLog(
+                            timestamp=current_time.isoformat(),
+                            role=role.value,
+                            source_agent_id=best.id,
+                            target_agent_ids=[a.id for a in pop.agents if a.id != best.id],
+                            transfer_tau=pop.config.transfer_tau,
+                            methods_transferred=best.current_selection,
+                            source_preferences=dict(best.preferences),
+                        )
+                        break  # Log first transfer found
 
             for pop in selector_workflow.populations.values():
                 pop.ensure_diversity()
@@ -830,6 +960,46 @@ class BacktestEngine:
                 )
 
             iteration_duration_ms = (time.time() - iteration_start_time) * 1000
+
+            # ====== Log iteration to ExperimentLogger ======
+            if logger:
+                from ..services.experiment_logger import PipelineResultLog
+
+                pipeline_logs = [
+                    PipelineResultLog(
+                        pipeline_id=f"pipe_{i}",
+                        agents={
+                            "analyst": r.analyst_id,
+                            "researcher": r.researcher_id,
+                            "trader": r.trader_id,
+                            "risk": r.risk_id,
+                        },
+                        methods={
+                            "analyst": r.analyst_methods,
+                            "researcher": r.researcher_methods,
+                            "trader": r.trader_methods,
+                            "risk": r.risk_methods,
+                        },
+                        pnl=r.pnl,
+                        sharpe=r.sharpe,
+                        success=r.success,
+                    )
+                    for i, r in enumerate(pipeline_results)
+                ]
+
+                iteration_log = logger.create_iteration_log(
+                    iteration=iteration_num,
+                    market_context=market_context,
+                    agent_decisions=agent_decisions,
+                    pipeline_results=pipeline_logs,
+                    best_pipeline_id=f"pipe_best" if best_result else None,
+                    best_pnl=best_result.pnl if best_result else 0.0,
+                    avg_pnl=avg_pnl,
+                    knowledge_transfer=transfer_log,
+                    diversity_metrics=diversity_metrics,
+                    iteration_duration_ms=iteration_duration_ms,
+                )
+                logger.log_iteration(iteration_log)
 
             # Store result
             all_iteration_results.append({
@@ -895,6 +1065,10 @@ class BacktestEngine:
         winning_trades = [p for p in pnls if p > 0]
         losing_trades = [p for p in pnls if p < 0]
 
+        # Calculate stay-flat rate
+        total_decisions = stayed_flat_count + traded_count
+        stay_flat_rate = stayed_flat_count / total_decisions if total_decisions > 0 else 0
+
         backtest_metrics = {
             "total_trades": total_trades,
             "final_capital": total_final_capital,
@@ -908,6 +1082,10 @@ class BacktestEngine:
             "avg_win": np.mean(winning_trades) if winning_trades else 0,
             "avg_loss": np.mean(losing_trades) if losing_trades else 0,
             "profit_factor": abs(sum(winning_trades) / sum(losing_trades)) if losing_trades else float('inf'),
+            # Stay flat metrics (v0.9.1)
+            "stayed_flat_count": stayed_flat_count,
+            "traded_count": traded_count,
+            "stay_flat_rate_pct": stay_flat_rate * 100,
         }
 
         learning_progress = selector_workflow.get_learning_progress()
@@ -924,6 +1102,9 @@ class BacktestEngine:
         print(f"Total Return: {backtest_metrics['total_return_pct']:.2f}%")
         print(f"Sharpe Ratio: {backtest_metrics['sharpe_ratio']:.2f}")
         print(f"Avg Correlation: {cross_asset_metrics['avg_correlation']:.3f}")
+        print(f"--- Stay Flat Stats (v0.9.1) ---")
+        print(f"Stayed Flat: {stayed_flat_count} iterations ({backtest_metrics['stay_flat_rate_pct']:.1f}%)")
+        print(f"Traded: {traded_count} iterations ({100 - backtest_metrics['stay_flat_rate_pct']:.1f}%)")
         print(f"{'='*60}\n")
 
         return {
@@ -962,6 +1143,30 @@ class BacktestEngine:
             aligned[sym] = df.loc[mask].copy()
 
         return aligned
+
+    def _create_combined_dataframe(
+        self,
+        historical_data: Dict[str, pd.DataFrame],
+    ) -> pd.DataFrame:
+        """Create combined DataFrame from multi-asset historical data.
+
+        Used for feature extraction in online learning.
+        """
+        if not historical_data:
+            return pd.DataFrame()
+
+        # Use first symbol as base
+        first_sym = list(historical_data.keys())[0]
+        combined = historical_data[first_sym].copy()
+
+        # Add columns from other symbols
+        for sym, df in historical_data.items():
+            if sym != first_sym:
+                for col in ["open", "high", "low", "close", "volume"]:
+                    if col in df.columns:
+                        combined[f"{sym}_{col}"] = df[col]
+
+        return combined
 
     def _calculate_cross_asset_features(
         self,

@@ -45,12 +45,90 @@ Unlike fixed-strategy trading systems, **PopAgent** maintains populations of age
 | Learn parameters | Learn WHICH methods to use |
 | Single best agent | Population discovers combinations |
 | Static configurations | Adapts to market conditions |
+| Train-then-deploy | **Online learning** (models update every bar) |
 
 ### Research Contribution
 - **Meta-Learning for Trading**: Agents learn to select strategies, not just tune parameters
 - **Selection Pressure**: Inventory (15) > Selection (3) creates meaningful choices
 - **Preference Transfer**: Knowledge sharing is about WHAT to select
 - **Context-Aware Selection**: Different methods for different market regimes
+- **Online Learning**: Models update after EVERY observation (like real hedge funds)
+
+---
+
+## 🧠 Feature-Aligned Learning (v0.9.8) - The Right Way
+
+**Key insight: Update frequency should match FEATURE TIMESCALE, not model complexity!**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│           FEATURE-ALIGNED LEARNING ARCHITECTURE                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  FAST FEATURES (momentum, vol) ─────────► Update: EVERY BAR    │
+│  Model: Any (even XGBoost!)     Why: These change every 4h     │
+│                                                                 │
+│  MEDIUM FEATURES (trend, daily) ────────► Update: EVERY 6 BARS │
+│  Model: Any                     Why: Trend changes daily       │
+│                                                                 │
+│  SLOW FEATURES (regime, corr) ──────────► Update: EVERY 42 BARS│
+│  Model: Any (even simple!)      Why: Regime changes weekly     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Wrong Approach (Model-Based) | Right Approach (Feature-Based) |
+|------------------------------|-------------------------------|
+| Simple model → fast update | Fast-changing feature → fast update |
+| Complex model → slow update | Slow-changing feature → slow update |
+| Computational constraint drives design | Data dynamics drive design |
+
+### How It Works:
+
+```
+Bar 1:   Observe → Predict → Trade → See outcome → UPDATE WEIGHTS
+Bar 2:   Observe → Predict (better) → Trade → See outcome → UPDATE WEIGHTS
+Bar 3:   Observe → Predict (even better) → Trade → See outcome → UPDATE WEIGHTS
+...
+Bar 8700: Model has been learning for 4 years
+```
+
+### Feature Groups and Models:
+
+| Feature Group | Features | Update Freq | Models Used |
+|---------------|----------|-------------|-------------|
+| **Fast** | ret_1bar, ret_5bar, vol_intrabar, momentum | Every bar | OnlineLinear + OnlineRidge |
+| **Medium** | trend_strength, daily_vol, sma_ratio | Every 6 bars | Ridge with batch refit |
+| **Slow** | regime, cross_correlation | Every 42 bars | RandomForest + regime means |
+
+### Online Models (used in Fast features):
+
+| Model | Algorithm | What It Learns |
+|-------|-----------|----------------|
+| `OnlineLinearRegression` | SGD | Return prediction |
+| `OnlineRidge` | Recursive Least Squares | Trend prediction |
+| `OnlineVolatility` | EWMA | Volatility estimation |
+| `OnlineRegimeDetector` | Bayesian HMM | Market regime (Bull/Bear/Neutral) |
+
+### Code Example:
+
+```python
+# Online models update after EVERY bar:
+for bar in price_data:
+    features = extract_features(bar)
+
+    # Predict BEFORE seeing outcome
+    prediction = model.predict(features)
+
+    # Execute trade
+    execute_trade(prediction)
+
+    # Next bar: see actual outcome
+    actual_return = next_bar.close / bar.close - 1
+
+    # UPDATE model weights with observation
+    model.update(features, actual_return)  # ← This is online learning!
+```
 
 ---
 
@@ -196,7 +274,52 @@ npm run dev
 
 Open **http://localhost:3000** in your browser.
 
-### Step 4: Export for NeurIPS Paper
+### Step 4: Run Ablation Study (LLM vs News Effects)
+```bash
+# Run all 4 conditions: A=Baseline, B=LLM, C=News, D=Full
+python -m trading_agents.cli ablation --condition all \
+    --symbols BTC,ETH,SOL,XRP,DOGE \
+    --start 2022-01-01 \
+    --end 2024-12-01
+
+# Run single condition (e.g., baseline only)
+python -m trading_agents.cli ablation --condition A
+```
+
+| Condition | LLM | News | Description |
+|-----------|-----|------|-------------|
+| A (Baseline) | No | No | Pure Thompson Sampling |
+| B (LLM Only) | Yes | No | LLM reasoning, no news |
+| C (News Only) | No | Yes | News as features |
+| D (Full) | Yes | Yes | Complete system |
+
+### Step 5: Real-Time Learning Mode (Live Trading)
+```bash
+# Run real-time learning with 4-hour iterations
+python -m trading_agents.cli live --symbols BTC,ETH,SOL,XRP,DOGE
+
+# With options
+python -m trading_agents.cli live \
+    --symbols BTC,ETH,SOL \
+    --interval 4.0 \
+    --use-llm \
+    --use-news \
+    --testnet  # Execute on Bybit testnet
+
+# Test single iteration (no waiting)
+python -m trading_agents.cli live --test-once
+```
+
+**Key difference from backtesting:**
+- **Backtest**: Simulates historical data rapidly (1000+ iterations in minutes)
+- **Live Mode**: Waits actual 4 hours between iterations, fetches live data
+
+| Mode | Data Source | Wait Time | Use Case |
+|------|-------------|-----------|----------|
+| Backtest | Historical CSV | None | Research, hyperparameter tuning |
+| Live | Real-time API | 4 hours | Continuous learning, paper trading |
+
+### Step 6: Export for NeurIPS Paper
 ```bash
 python -m trading_agents.cli export --experiment-id <exp_id> --output-dir exports/neurips
 ```
@@ -263,6 +386,9 @@ trading_agents/
 │   └── ...                        # Transfer, diversity, scoring
 ├── agents/                        # Agent implementations
 ├── inventory/                     # Method implementations
+│   ├── online_models.py           # Online learning (SGD, RLS, HMM)
+│   ├── feature_aligned_learner.py # Feature-timescale-aligned learning (v0.9.8)
+│   └── ...                        # Analyst, Researcher, Trader, Risk methods
 ├── backtesting/                   # Backtesting engine
 │   ├── engine.py                  # BacktestEngine with population support
 │   └── executor.py                # Order execution simulation
@@ -306,13 +432,99 @@ tests/                             # Test suite
    * Thompson Sampling for Bayesian exploration
    * Contextual baselines for regime-aware learning
    * Multi-step returns for temporal credit assignment
-* (2025.12.20) **PopAgent v0.8.0: Testing & Visualization** 🆕
+* (2025.12.20) **PopAgent v0.8.0: Testing & Visualization**
    * Complete test suite with mock data fixtures
    * Population-based backtesting (`run_population_backtest`)
    * React dashboard for visualization (Next.js + Tailwind)
    * FastAPI backend with WebSocket live updates
    * 4-hour paper trading scheduler
    * NeurIPS export utilities (figures, tables, traces)
+* (2025.12.20) **PopAgent v0.9.0: Online Learning (Hedge Fund Style)**
+   * **TRUE Online Learning**: Models update weights after EVERY observation
+   * `OnlineLinearRegression`: SGD-based return predictor
+   * `OnlineRidge`: Recursive Least Squares with forgetting factor
+   * `OnlineVolatility`: EWMA variance estimation
+   * `OnlineRegimeDetector`: Bayesian HMM with incremental updates
+   * Persistent model state across sessions
+   * Real-time learning mode (`python -m trading_agents.cli live`)
+* (2025.12.20) **PopAgent v0.9.1-v0.9.6: Incremental Improvements**
+   * v0.9.1: Stay-flat metrics tracking (avoid trading in uncertainty)
+   * v0.9.4: Simplified trading logic (online model decides trade/no-trade)
+   * v0.9.5: Fixed momentum as PRIMARY driver (not overridden by untrained models)
+   * v0.9.6: Real pipeline execution, regime detector responsiveness fixes
+* (2025.12.21) **PopAgent v0.9.8: Feature-Aligned Learning** 🆕
+   * **KEY INSIGHT**: Update frequency should match FEATURE TIMESCALE, not model complexity!
+   * Deprecated hybrid learning (model complexity → frequency approach was flawed)
+   * New `FeatureAlignedLearner` with 3 feature groups:
+     * **Fast features** (momentum, vol spikes): Update EVERY bar
+     * **Medium features** (trend, daily vol): Update every 6 bars (~daily)
+     * **Slow features** (regime, correlations): Update every 42 bars (~weekly)
+   * Each group can use ANY model complexity - complexity ≠ update frequency
+   * Adaptive blending weights based on market conditions
+   * `feature_aligned_learner.py`: 500+ lines of principled learning architecture
+
+---
+
+## 🧪 Ablation Experiments
+
+### Planned Experiments for NeurIPS Paper
+
+#### 1. Learning Approach Comparison
+| Experiment | Description | Hypothesis |
+|------------|-------------|------------|
+| **A: Online-Only** | Pure SGD, update every bar | Fast adaptation, poor pattern capture |
+| **B: Batch-Only** | Refit RF/XGB weekly | Good patterns, slow adaptation |
+| **C: Hybrid (Model-Based)** | Simple→fast, Complex→slow | Suboptimal: wrong dimension |
+| **D: Feature-Aligned** | Fast features→fast, Slow→slow | ✓ Best: matches data dynamics |
+
+```bash
+python -m trading_agents.cli ablation --experiment learning_approach \
+    --conditions online,batch,hybrid,feature_aligned
+```
+
+#### 2. Feature Timescale Sensitivity
+| Config | Fast Freq | Medium Freq | Slow Freq |
+|--------|-----------|-------------|-----------|
+| Aggressive | 1 bar | 3 bars | 21 bars |
+| **Default** | 1 bar | 6 bars | 42 bars |
+| Conservative | 1 bar | 12 bars | 84 bars |
+
+#### 3. Method Selection vs Fixed Strategies
+| Condition | Strategy | Expected Outcome |
+|-----------|----------|-----------------|
+| Fixed-Best | Always use top-3 methods | Good baseline, no adaptation |
+| Fixed-Random | Random method selection | Poor performance |
+| **PopAgent** | Learned selection | Adapts to regime changes |
+
+#### 4. Population Size Effect
+| Pop Size | Diversity | Convergence Speed | Final Performance |
+|----------|-----------|-------------------|-------------------|
+| 3 | Low | Fast | Risk of local optima |
+| **5** | Medium | Balanced | Default setting |
+| 10 | High | Slow | Better exploration |
+
+#### 5. Knowledge Transfer Frequency
+| Transfer Every | Effect |
+|---------------|--------|
+| 5 iterations | Rapid homogenization |
+| **10 iterations** | Balanced (default) |
+| 20 iterations | More diversity, slower learning |
+
+#### 6. Cross-Asset Learning
+| Condition | Description |
+|-----------|-------------|
+| Independent | Each asset learns separately |
+| **Shared Population** | Single population, cross-asset features |
+| Transfer Across Assets | BTC insights → altcoins |
+
+### Metrics to Report
+- Sharpe Ratio (primary)
+- Total Return %
+- Maximum Drawdown
+- Win Rate
+- Stay-Flat Rate (% of iterations with no trade)
+- Learning Improvement (avg PnL last 10% vs first 10%)
+- Selection Diversity (entropy of method usage)
 
 ---
 
