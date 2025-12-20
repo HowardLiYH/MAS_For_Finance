@@ -141,6 +141,108 @@ Examples:
         help="Number of iterations to run (default: 10)"
     )
 
+    # Backtest command (population-based historical backtest)
+    backtest_parser = subparsers.add_parser(
+        "backtest",
+        help="Run population-based historical backtest with real price data"
+    )
+    backtest_parser.add_argument(
+        "--config",
+        type=Path,
+        help="Path to config file (default: configs/multi_asset.yaml)"
+    )
+    backtest_parser.add_argument(
+        "--symbol",
+        type=str,
+        default="BTC",
+        help="Symbol to backtest (default: BTC)"
+    )
+    backtest_parser.add_argument(
+        "--start",
+        type=str,
+        default=None,
+        help="Start date (YYYY-MM-DD)"
+    )
+    backtest_parser.add_argument(
+        "--end",
+        type=str,
+        default=None,
+        help="End date (YYYY-MM-DD)"
+    )
+    backtest_parser.add_argument(
+        "--population-size",
+        type=int,
+        default=5,
+        help="Agents per role (default: 5)"
+    )
+    backtest_parser.add_argument(
+        "--capital",
+        type=float,
+        default=10000.0,
+        help="Initial capital (default: 10000)"
+    )
+    backtest_parser.add_argument(
+        "--log-dir",
+        type=str,
+        default="logs/experiments",
+        help="Directory for experiment logs"
+    )
+
+    # Export command for NeurIPS
+    export_parser = subparsers.add_parser(
+        "export",
+        help="Export experiment data for NeurIPS paper (figures, tables, traces)"
+    )
+    export_parser.add_argument(
+        "--experiment-id",
+        type=str,
+        required=True,
+        help="Experiment ID to export"
+    )
+    export_parser.add_argument(
+        "--log-dir",
+        type=str,
+        default="logs/experiments",
+        help="Directory containing experiment logs"
+    )
+    export_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="exports/neurips",
+        help="Output directory for figures and tables"
+    )
+    export_parser.add_argument(
+        "--format",
+        type=str,
+        nargs="+",
+        default=["pdf", "latex"],
+        help="Output formats: pdf, png, latex, csv"
+    )
+
+    # API server command
+    api_parser = subparsers.add_parser(
+        "api",
+        help="Start the dashboard API server"
+    )
+    api_parser.add_argument(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Host to bind (default: 0.0.0.0)"
+    )
+    api_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind (default: 8000)"
+    )
+    api_parser.add_argument(
+        "--log-dir",
+        type=str,
+        default="logs/experiments",
+        help="Directory containing experiment logs"
+    )
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -206,6 +308,15 @@ Examples:
 
     elif args.command == "population":
         _run_population_mode(args)
+
+    elif args.command == "backtest":
+        _run_backtest_mode(args)
+
+    elif args.command == "export":
+        _run_export_mode(args)
+
+    elif args.command == "api":
+        _run_api_server(args)
 
     else:
         parser.print_help()
@@ -322,6 +433,187 @@ def _run_population_mode(args):
         print(f"Iteration {i+1}: {result}")
 
     print("\n[Population Mode Complete]")
+
+
+def _run_backtest_mode(args):
+    """Run population-based historical backtest."""
+    from datetime import datetime, timezone
+    from pathlib import Path
+    import pandas as pd
+
+    from .population import (
+        SelectorWorkflow,
+        SelectorWorkflowConfig,
+        get_inventory_sizes,
+    )
+    from .backtesting import BacktestEngine
+    from .services.experiment_logger import ExperimentLogger
+
+    print(f"\n{'='*60}")
+    print("📊 POPULATION BACKTEST")
+    print(f"{'='*60}")
+
+    # Show inventory sizes
+    inv_sizes = get_inventory_sizes()
+    print("\nMethod Inventories:")
+    for role, size in inv_sizes.items():
+        print(f"  {role.capitalize()}: {size} methods")
+
+    # Load price data
+    symbol = args.symbol.upper()
+    csv_path = Path(f"data/bybit/Bybit_{symbol}.csv")
+
+    if not csv_path.exists():
+        print(f"\n❌ Error: Price data not found at {csv_path}")
+        print(f"   Available symbols: BTC, ETH, SOL, DOGE, XRP")
+        return
+
+    print(f"\nLoading {symbol} price data from {csv_path}...")
+    price_df = pd.read_csv(csv_path)
+
+    # Handle timestamp column
+    if "timestamp_utc" in price_df.columns:
+        price_df["timestamp"] = pd.to_datetime(price_df["timestamp_utc"], utc=True)
+    elif "timestamp" in price_df.columns:
+        price_df["timestamp"] = pd.to_datetime(price_df["timestamp"], utc=True)
+
+    price_df.set_index("timestamp", inplace=True)
+    price_df.sort_index(inplace=True)
+
+    print(f"Loaded {len(price_df)} bars ({price_df.index[0]} to {price_df.index[-1]})")
+
+    # Parse dates
+    start_date = None
+    end_date = None
+
+    if args.start:
+        start_date = datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    if args.end:
+        end_date = datetime.strptime(args.end, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+    # Create workflow
+    config = SelectorWorkflowConfig(
+        population_size=args.population_size,
+        max_methods_per_agent=3,
+    )
+    workflow = SelectorWorkflow(config)
+
+    # Create backtest engine
+    engine = BacktestEngine(
+        initial_capital=args.capital,
+        commission=0.001,
+    )
+
+    # Create logger
+    logger = ExperimentLogger(
+        experiment_id=f"backtest_{symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        log_dir=args.log_dir,
+        config={
+            "symbol": symbol,
+            "population_size": args.population_size,
+            "initial_capital": args.capital,
+            "start_date": args.start,
+            "end_date": args.end,
+        }
+    )
+
+    print(f"\nPopulation: {args.population_size} agents per role")
+    print(f"Initial capital: ${args.capital:,.2f}")
+    print(f"Logging to: {args.log_dir}")
+    print("\nStarting backtest...\n")
+
+    # Run population backtest
+    results = engine.run_population_backtest(
+        price_df=price_df,
+        selector_workflow=workflow,
+        start_date=start_date,
+        end_date=end_date,
+        iteration_bar_count=1,  # Every 4h bar
+        logger=logger,
+    )
+
+    # Print results
+    print(f"\n{'='*60}")
+    print("BACKTEST RESULTS")
+    print(f"{'='*60}")
+
+    metrics = results["backtest_metrics"]
+    print(f"\n📈 Performance Metrics:")
+    print(f"  Total Trades: {metrics['total_trades']}")
+    print(f"  Final Capital: ${metrics['final_capital']:,.2f}")
+    print(f"  Total Return: {metrics['total_return_pct']:.2f}%")
+    print(f"  Sharpe Ratio: {metrics['sharpe_ratio']:.2f}")
+    print(f"  Max Drawdown: {metrics['max_drawdown_pct']:.2f}%")
+    print(f"  Win Rate: {metrics['win_rate_pct']:.2f}%")
+
+    print(f"\n🧬 Learning Progress:")
+    progress = results["learning_progress"]
+    print(f"  Improvement: {progress.get('improvement', 0):.4f}")
+
+    print(f"\n🏆 Best Methods by Role:")
+    for role, methods in results["best_methods"].items():
+        print(f"  {role.capitalize()}: {methods}")
+
+    print(f"\n📊 Method Popularity:")
+    for role, popularity in results["method_popularity"].items():
+        top_methods = sorted(popularity.items(), key=lambda x: x[1], reverse=True)[:3]
+        formatted = [(m, f'{p:.1%}') for m, p in top_methods]
+        print(f"  {role.capitalize()}: {formatted}")
+
+    print(f"\n✅ Experiment logged to: {logger.summary_file}")
+    print(f"{'='*60}\n")
+
+
+def _run_export_mode(args):
+    """Export experiment data for NeurIPS paper."""
+    from .services.neurips_export import export_for_neurips
+
+    print(f"\n{'='*60}")
+    print("📄 NEURIPS EXPORT")
+    print(f"{'='*60}")
+    print(f"Experiment: {args.experiment_id}")
+    print(f"Output dir: {args.output_dir}")
+    print(f"Formats: {args.format}")
+    print(f"{'='*60}\n")
+
+    try:
+        outputs = export_for_neurips(
+            log_dir=args.log_dir,
+            experiment_id=args.experiment_id,
+            output_dir=args.output_dir,
+            formats=args.format,
+        )
+
+        print("\n✅ Export complete!")
+        print(f"Generated {len(outputs)} files:")
+        for name, path in outputs.items():
+            print(f"  - {name}: {path}")
+
+    except FileNotFoundError:
+        print(f"\n❌ Error: Experiment '{args.experiment_id}' not found in {args.log_dir}")
+        print("   Run 'trading-agents backtest' first to generate experiment data.")
+    except Exception as e:
+        print(f"\n❌ Export failed: {e}")
+
+
+def _run_api_server(args):
+    """Start the dashboard API server."""
+    print(f"\n{'='*60}")
+    print("🌐 POPAGENT API SERVER")
+    print(f"{'='*60}")
+    print(f"Host: {args.host}")
+    print(f"Port: {args.port}")
+    print(f"Log dir: {args.log_dir}")
+    print(f"{'='*60}\n")
+
+    try:
+        from .api.server import run_server
+        run_server(host=args.host, port=args.port, log_dir=args.log_dir)
+    except ImportError as e:
+        print(f"\n❌ Error: {e}")
+        print("   Install required packages: pip install fastapi uvicorn")
+    except Exception as e:
+        print(f"\n❌ Server failed: {e}")
 
 
 if __name__ == "__main__":

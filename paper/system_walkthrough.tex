@@ -573,6 +573,355 @@ class MethodSelector:
 With 455 possible method combinations per role, agents must \textit{learn} which ones work. This is fundamentally different from parameter tuning.
 
 %==============================================================================
+\section{Inventory Implementation: Pools and Methods}
+%==============================================================================
+
+This section provides the technical details of how methods are stored, registered, and accessed in the PopAgent codebase.
+
+\subsection{The Central Registry Data Structure}
+
+All methods are stored in a single nested dictionary structure:
+
+\begin{lstlisting}[language=Python]
+from collections import defaultdict
+from typing import Dict, Type
+
+REGISTRY: Dict[str, Dict[str, type]] = defaultdict(dict)
+\end{lstlisting}
+
+\begin{keybox}[Registry Structure]
+The \texttt{REGISTRY} is a two-level dictionary:
+\begin{itemize}
+    \item \textbf{Outer key}: Pool name (e.g., \texttt{"analyst.features"}, \texttt{"researcher.forecasting"})
+    \item \textbf{Inner key}: Method name (e.g., \texttt{"talib\_stack"}, \texttt{"arima\_x"})
+    \item \textbf{Value}: The Python class implementing the method
+\end{itemize}
+\end{keybox}
+
+\textbf{Visual representation of the registry}:
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    pool/.style={rectangle, draw, rounded corners, fill=blue!20, minimum width=4cm, minimum height=0.8cm, align=center, font=\footnotesize},
+    method/.style={rectangle, draw, fill=green!20, minimum width=2.5cm, minimum height=0.5cm, font=\tiny},
+    arrow/.style={->, thick}
+]
+
+% Registry box
+\node[rectangle, draw, thick, minimum width=12cm, minimum height=5cm, fill=gray!5] at (0, 0) {};
+\node[font=\bfseries] at (0, 2.7) {REGISTRY: Dict[str, Dict[str, type]]};
+
+% Pool 1: analyst.features
+\node[pool] (p1) at (-4, 1.5) {``analyst.features''};
+\node[method] (m1a) at (-4, 0.7) {``talib\_stack'' $\rightarrow$ TALibStack};
+\node[method] (m1b) at (-4, 0.2) {``stl'' $\rightarrow$ STLDecomposition};
+
+% Pool 2: analyst.trends
+\node[pool] (p2) at (0, 1.5) {``analyst.trends''};
+\node[method] (m2a) at (0, 0.7) {``gaussian\_hmm'' $\rightarrow$ GaussianHMM};
+\node[method] (m2b) at (0, 0.2) {``kalman\_filter'' $\rightarrow$ KalmanFilter};
+
+% Pool 3: researcher.forecasting
+\node[pool] (p3) at (4, 1.5) {``researcher.forecasting''};
+\node[method] (m3a) at (4, 0.7) {``arima\_x'' $\rightarrow$ ARIMAX};
+\node[method] (m3b) at (4, 0.2) {``tft'' $\rightarrow$ TFT};
+
+% More pools indicator
+\node[font=\footnotesize, color=gray] at (0, -0.5) {...and 4 more pools (researcher.uncertainty, researcher.calibration, trader.styles, risk.checks)};
+
+% Access arrows
+\draw[arrow, dashed] (-4, 1.1) -- (m1a);
+\draw[arrow, dashed] (0, 1.1) -- (m2a);
+\draw[arrow, dashed] (4, 1.1) -- (m3a);
+
+\end{tikzpicture}
+\caption{The REGISTRY stores methods organized by pool name, with each pool containing named method classes.}
+\label{fig:registry}
+\end{figure}
+
+\subsection{The Registration Pattern}
+
+Methods are registered using a Python decorator:
+
+\begin{lstlisting}[language=Python]
+def register(pool: str, name: str):
+    """Decorator to register an inventory method."""
+    def decorator(cls: Type):
+        REGISTRY[pool][name] = cls
+        cls.pool = pool      # Attach metadata
+        cls.name = name
+        return cls
+    return decorator
+\end{lstlisting}
+
+\textbf{Example usage}:
+
+\begin{lstlisting}[language=Python]
+@register("analyst.features", "talib_stack")
+class TALibStack(FeatureMethod):
+    """Technical analysis feature stack using pandas."""
+    name = "talib_stack"
+
+    def run(self, price_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        # Compute EMA, RSI, ATR indicators...
+        return features_df
+\end{lstlisting}
+
+When Python loads the module, the \texttt{@register} decorator automatically adds the class to the registry.
+
+\subsection{Abstract Interfaces}
+
+Each method type inherits from an abstract base class that defines the expected interface:
+
+\begin{lstlisting}[language=Python]
+from abc import ABC, abstractmethod
+
+# ============= Analyst Methods =============
+class FeatureMethod(ABC):
+    """Base class for feature construction methods."""
+    @abstractmethod
+    def run(self, price_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        """Returns DataFrame with computed features."""
+        ...
+
+class TrendMethod(ABC):
+    """Base class for trend detection methods."""
+    @abstractmethod
+    def run(self, price_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        """Returns DataFrame with prob_up, prob_down, regime, slope."""
+        ...
+
+# ============= Researcher Methods =============
+class ForecastMethod(ABC):
+    """Base class for forecasting methods."""
+    @abstractmethod
+    def run(self, features, trend, **kwargs) -> Dict[str, float]:
+        """Returns dict mapping horizon to predicted % change."""
+        ...
+
+class UncertaintyMethod(ABC):
+    """Base class for uncertainty quantification."""
+    @abstractmethod
+    def run(self, features, trend, forecast, **kwargs) -> Dict[str, float]:
+        """Returns uncertainty metrics (q05, q95, etc.)."""
+        ...
+
+class CalibrationMethod(ABC):
+    """Base class for probability calibration."""
+    @abstractmethod
+    def run(self, forecast, **kwargs) -> Dict[str, float]:
+        """Returns calibrated forecast dict."""
+        ...
+
+# ============= Trader Methods =============
+class ExecutionStyleMethod(ABC):
+    """Base class for execution style selection."""
+    @abstractmethod
+    def choose(self, research_summary, news, **kwargs) -> str:
+        """Returns execution style name."""
+        ...
+
+# ============= Risk Methods =============
+class RiskCheckMethod(ABC):
+    """Base class for risk validation."""
+    @abstractmethod
+    def evaluate(self, execution, context) -> Dict[str, Any]:
+        """Returns verdict (pass/soft_fail/hard_fail) + envelope."""
+        ...
+\end{lstlisting}
+
+\subsection{Accessing Methods from the Registry}
+
+Three primary functions for working with the registry:
+
+\begin{lstlisting}[language=Python]
+def get(pool: str, name: str) -> Type:
+    """Get a registered method class by pool and name."""
+    if pool not in REGISTRY:
+        raise KeyError(f"Unknown pool: {pool}")
+    if name not in REGISTRY[pool]:
+        raise KeyError(f"Unknown method '{name}' in pool '{pool}'")
+    return REGISTRY[pool][name]
+
+def list_methods(pool: str) -> List[str]:
+    """List all registered methods in a pool."""
+    return list(REGISTRY[pool].keys())
+
+def list_pools() -> List[str]:
+    """List all registered pools."""
+    return list(REGISTRY.keys())
+\end{lstlisting}
+
+\textbf{Usage examples}:
+
+\begin{lstlisting}[language=Python]
+from trading_agents.inventory import get, list_methods, load_all_methods
+
+# First, ensure all methods are loaded
+load_all_methods()
+
+# Get a specific method class
+TALibStack = get("analyst.features", "talib_stack")
+method_instance = TALibStack()
+features = method_instance.run(price_df)
+
+# List all methods in a pool
+print(list_methods("analyst.features"))
+# Output: ['talib_stack', 'stl']
+
+# List all pools
+print(list_pools())
+# Output: ['analyst.features', 'analyst.trends',
+#          'researcher.forecasting', ...]
+\end{lstlisting}
+
+\subsection{Dynamic Method Loading}
+
+Methods are loaded dynamically at startup using Python's \texttt{pkgutil}:
+
+\begin{lstlisting}[language=Python]
+import pkgutil
+import importlib
+from pathlib import Path
+
+def load_all_methods() -> None:
+    """Import all inventory modules so @register decorators run."""
+    pkg_path = Path(__file__).parent
+
+    for finder, name, ispkg in pkgutil.iter_modules([str(pkg_path)]):
+        if name.startswith("_"):
+            continue
+        if ispkg:
+            # Load sub-package modules (analyst/, researcher/, etc.)
+            subpkg_path = pkg_path / name
+            for _, subname, _ in pkgutil.iter_modules([str(subpkg_path)]):
+                if not subname.startswith("_"):
+                    importlib.import_module(f".{name}.{subname}",
+                                           package=__name__)
+        else:
+            importlib.import_module(f".{name}", package=__name__)
+\end{lstlisting}
+
+This pattern allows adding new methods simply by:
+\begin{enumerate}
+    \item Creating a new Python file in the appropriate subdirectory
+    \item Defining a class with the \texttt{@register} decorator
+    \item The method is automatically available at next startup
+\end{enumerate}
+
+\subsection{Complete Inventory Pools Reference}
+
+\begin{table}[h]
+\centering
+\footnotesize
+\caption{All inventory pools with their registered methods.}
+\begin{tabular}{|l|l|l|p{6cm}|}
+\hline
+\textbf{Pool Name} & \textbf{Interface} & \textbf{Methods} & \textbf{Output} \\
+\hline
+\texttt{analyst.features} & \texttt{FeatureMethod} & \texttt{talib\_stack}, \texttt{stl} & DataFrame with computed indicators \\
+\hline
+\texttt{analyst.trends} & \texttt{TrendMethod} & \texttt{gaussian\_hmm}, \texttt{kalman\_filter} & DataFrame with prob\_up, prob\_down, regime, slope \\
+\hline
+\texttt{researcher.forecasting} & \texttt{ForecastMethod} & \texttt{arima\_x}, \texttt{tft} & Dict mapping horizon to \% change \\
+\hline
+\texttt{researcher.uncertainty} & \texttt{UncertaintyMethod} & \texttt{bootstrap\_ensemble}, \texttt{quantile\_regression} & Dict with quantiles (q05, q10, q90, q95) \\
+\hline
+\texttt{researcher.calibration} & \texttt{CalibrationMethod} & \texttt{temperature\_scaling}, \texttt{conformal\_icp} & Calibrated forecast dict \\
+\hline
+\texttt{trader.styles} & \texttt{ExecutionStyleMethod} & \texttt{aggressive\_market}, \texttt{passive\_laddered\_limit} & Style name string \\
+\hline
+\texttt{risk.checks} & \texttt{RiskCheckMethod} & \texttt{var\_safe\_band}, \texttt{leverage\_position\_limits}, \texttt{liquidation\_safety}, \texttt{margin\_call\_risk}, \texttt{global\_var\_breach} & Verdict dict with pass/fail + envelope \\
+\hline
+\end{tabular}
+\label{tab:pools}
+\end{table}
+
+\subsection{Method Implementation Examples}
+
+\textbf{Analyst: Feature Method (TALib Stack)}:
+
+\begin{lstlisting}[language=Python]
+@register("analyst.features", "talib_stack")
+class TALibStack(FeatureMethod):
+    """Computes: EMA(12), EMA(26), RSI(14), ATR(14)"""
+
+    def run(self, price_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        close = price_df["close"]
+
+        # EMA (12, 26)
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+
+        # RSI (14)
+        delta = close.diff()
+        gain = delta.clip(lower=0).ewm(alpha=1/14).mean()
+        loss = (-delta.clip(upper=0)).ewm(alpha=1/14).mean()
+        rsi14 = 100 - (100 / (1 + gain / (loss + 1e-9)))
+
+        # ATR (14) ...
+        return pd.DataFrame({"ema12": ema12, "ema26": ema26,
+                            "rsi14": rsi14, "atr14": atr14})
+\end{lstlisting}
+
+\textbf{Risk: Check Method (VaR Safe Band)}:
+
+\begin{lstlisting}[language=Python]
+@register("risk.checks", "var_safe_band")
+class VaRSafeBand(RiskCheckMethod):
+    """Check if 1-day VaR is within safe band."""
+
+    def evaluate(self, execution, context) -> Dict[str, Any]:
+        # Calculate 99% VaR
+        returns = context["price_df"]["close"].pct_change().dropna()
+        volatility = returns.rolling(30).std().iloc[-1]
+        var99 = 2.33 * volatility  # Gaussian VaR
+
+        pnl_at_var = execution["position_size"] * var99
+        limit = context.get("var_limit", 0.02)
+
+        if abs(pnl_at_var) > limit * 3:
+            return {"verdict": "hard_fail", "reasons": ["Extreme VaR"]}
+        elif abs(pnl_at_var) > limit:
+            return {"verdict": "soft_fail",
+                    "envelope": {"max_size": limit / abs(var99)}}
+        return {"verdict": "pass", "reasons": ["VaR OK"]}
+\end{lstlisting}
+
+\subsection{Extending the Inventory}
+
+To add a new method to the inventory:
+
+\begin{enumerate}
+    \item \textbf{Choose the appropriate pool}: Determine which agent role and category
+    \item \textbf{Inherit from the correct interface}: e.g., \texttt{FeatureMethod} for analyst features
+    \item \textbf{Apply the register decorator}: \texttt{@register("pool.name", "method\_name")}
+    \item \textbf{Implement the required method}: \texttt{run()} or \texttt{evaluate()}
+\end{enumerate}
+
+\begin{lstlisting}[language=Python]
+# Example: Adding a new Bollinger Bands feature method
+@register("analyst.features", "bollinger_bands")
+class BollingerBands(FeatureMethod):
+    """Bollinger Bands with 20-period SMA and 2 std bands."""
+
+    def run(self, price_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        close = price_df["close"]
+        sma = close.rolling(20).mean()
+        std = close.rolling(20).std()
+
+        return pd.DataFrame({
+            "bb_upper": sma + 2 * std,
+            "bb_middle": sma,
+            "bb_lower": sma - 2 * std,
+            "bb_width": (4 * std) / sma  # Normalized width
+        })
+\end{lstlisting}
+
+The new method is automatically available after restarting the system.
+
+%==============================================================================
 \section{The Learning Algorithm}
 %==============================================================================
 
@@ -1040,24 +1389,35 @@ trading_agents/
 |   |-- inventories.py        # 47 methods across 4 roles
 |   |-- selector_workflow.py  # Learning loop
 |   |-- transfer.py           # Knowledge transfer strategies
-|   |-- diversity.py          # Diversity preservation
 |   `-- scoring.py            # Shapley-based credit assignment
 |
-|-- agents/                   # Agent implementations
-|   |-- analyst.py            # Feature engineering
-|   |-- researcher.py         # Forecasting
-|   |-- trader.py             # Order generation
-|   |-- risk.py               # Risk validation
-|   `-- admin.py              # Monitoring/reporting
+|-- backtesting/              # Backtesting engine
+|   |-- engine.py             # BacktestEngine + run_population_backtest
+|   `-- executor.py           # Order execution simulation
 |
 |-- services/                 # Infrastructure
+|   |-- experiment_logger.py  # Structured JSONL logging
+|   |-- scheduler.py          # 4-hour paper trading scheduler
+|   |-- neurips_export.py     # Publication figure generation
 |   |-- llm.py                # LLM integration
-|   |-- events.py             # Event bus
-|   |-- notifications.py      # Alerts
 |   `-- bybit_client.py       # Exchange API
 |
+|-- api/                      # Dashboard backend
+|   `-- server.py             # FastAPI + WebSocket server
+|
+|-- agents/                   # Agent implementations
+|   |-- analyst.py, researcher.py, trader.py, risk.py
+|   `-- admin.py              # Monitoring/reporting
+|
 `-- config/                   # Configuration
-    `-- schemas.py            # Config dataclasses
+
+dashboard/                    # React Visualization Dashboard
+|-- src/components/           # AgentPopulation, MethodHeatmap, etc.
+`-- src/app/                  # Next.js app with dark theme
+
+tests/                        # Test suite
+|-- conftest.py               # Pytest fixtures with mock data
+`-- test_*.py                 # Workflow, selection, transfer tests
 \end{lstlisting}
 
 %==============================================================================
@@ -1238,6 +1598,69 @@ After running, you'll see:
     \item \textbf{Learning curves}: How preferences evolved over iterations
     \item \textbf{Best pipeline}: Top-performing agent combination
 \end{itemize}
+
+\subsection{Running the Visualization Dashboard}
+
+PopAgent includes a modern React dashboard for visualizing the learning process:
+
+\begin{lstlisting}[language=bash]
+# 1. Start the backend API server
+python -m trading_agents.cli api --port 8000
+
+# 2. In a separate terminal, start the React dashboard
+cd dashboard
+npm install
+npm run dev
+
+# 3. Open http://localhost:3000 in your browser
+\end{lstlisting}
+
+The dashboard provides:
+\begin{itemize}
+    \item \textbf{Population View}: Grid visualization of all 20 agents across 4 roles
+    \item \textbf{Method Heatmap}: Selection frequency per agent/method
+    \item \textbf{Learning Timeline}: PnL over iterations with transfer markers
+    \item \textbf{Pipeline Flow}: Animated visualization of data through agents
+    \item \textbf{Reasoning Panel}: LLM explanations for method selection
+    \item \textbf{Knowledge Transfer}: Timeline of preference transfers
+\end{itemize}
+
+\subsection{Running Population Backtest}
+
+Test the PopAgent system on historical data:
+
+\begin{lstlisting}[language=bash]
+# Run backtest on BTC data
+python -m trading_agents.cli backtest --symbol BTC --population-size 5
+
+# Specify date range
+python -m trading_agents.cli backtest --symbol ETH \
+    --start 2024-01-01 --end 2024-06-01
+
+# With custom capital
+python -m trading_agents.cli backtest --symbol BTC --capital 50000
+\end{lstlisting}
+
+\subsection{Exporting for NeurIPS Paper}
+
+Generate publication-ready figures and tables:
+
+\begin{lstlisting}[language=bash]
+# Export all figures and tables
+python -m trading_agents.cli export \
+    --experiment-id backtest_BTC_20241220_143022 \
+    --output-dir exports/neurips \
+    --format pdf latex
+
+# Generated files:
+# - figure1_learning_curve.pdf
+# - figure2_method_popularity.pdf
+# - figure3_cumulative_returns.pdf
+# - figure4_diversity.pdf
+# - table1_performance.tex
+# - table2_methods.tex
+# - appendix_reasoning_traces.json
+\end{lstlisting}
 
 \subsection{Configuration}
 

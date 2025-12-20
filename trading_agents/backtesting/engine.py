@@ -1,7 +1,12 @@
-"""Backtesting engine using BackTrader framework."""
+"""Backtesting engine using BackTrader framework.
+
+Supports both single-agent and population-based (PopAgent) backtesting.
+"""
 from __future__ import annotations
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 from datetime import datetime, timezone
+from dataclasses import dataclass, field
+import time
 import pandas as pd
 import numpy as np
 
@@ -12,11 +17,12 @@ except ImportError:
     print("⚠️ BackTrader not installed. Backtesting will use simplified simulation.")
 
 from .executor import OrderExecutor, OrderExecution
-from ..models.types import ExecutionSummary, ResearchSummary
-from ..agents.analyst import AnalystAgent
-from ..agents.researcher import ResearcherAgent
-from ..agents.trader import TraderAgent
-from ..agents.risk import RiskManagerAgent
+from ..models import ExecutionSummary, ResearchSummary
+
+# Lazy imports to avoid circular dependencies
+if TYPE_CHECKING:
+    from ..population.selector_workflow import SelectorWorkflow
+    from ..services.experiment_logger import ExperimentLogger
 
 
 class BacktestEngine:
@@ -278,6 +284,347 @@ class BacktestEngine:
                 if len(pnl_pcts) > 1 and np.std(pnl_pcts) > 0 else 0.0
             ),
         }
+
+
+    def run_population_backtest(
+        self,
+        price_df: pd.DataFrame,
+        selector_workflow: "SelectorWorkflow",
+        news_items_fn: Optional[Callable[[datetime, datetime], List[Dict[str, Any]]]] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        iteration_bar_count: int = 1,
+        logger: Optional["ExperimentLogger"] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run backtest with PopAgent selector workflow.
+
+        At each iteration (every N bars):
+        1. All agents select methods from inventory
+        2. Sample pipeline combinations
+        3. Execute the BEST pipeline through OrderExecutor
+        4. Update agent preferences based on actual PnL
+        5. Transfer knowledge from best performers
+
+        Args:
+            price_df: Historical price data with datetime index
+            selector_workflow: SelectorWorkflow instance with agent populations
+            news_items_fn: Function to get news items for a time period
+            start_date: Start of backtest period
+            end_date: End of backtest period
+            iteration_bar_count: Number of bars per iteration (default: 1)
+            logger: Optional ExperimentLogger for detailed logging
+
+        Returns:
+            Dict with backtest results and learning progress
+        """
+        from ..population.selector_workflow import PipelineResult
+        from ..services.experiment_logger import (
+            AgentDecisionLog,
+            PipelineResultLog,
+            DiversityMetrics,
+        )
+
+        # Filter price data
+        if start_date:
+            price_df = price_df[price_df.index >= start_date]
+        if end_date:
+            price_df = price_df[price_df.index <= end_date]
+
+        print(f"\n{'='*60}")
+        print(f"🧬 POPULATION BACKTEST")
+        print(f"{'='*60}")
+        print(f"Period: {price_df.index[0]} → {price_df.index[-1]}")
+        print(f"Bars: {len(price_df)}, Iteration every {iteration_bar_count} bars")
+        print(f"Population size: {selector_workflow.config.population_size} per role")
+        print(f"{'='*60}\n")
+
+        # Track results
+        all_iteration_results = []
+        iteration_pnls = []
+
+        # Process bars in iteration chunks
+        bar_idx = 10  # Start after minimum lookback
+        iteration_num = 0
+
+        while bar_idx < len(price_df):
+            iteration_start_time = time.time()
+            iteration_num += 1
+
+            # Get data for this iteration
+            current_bar = price_df.iloc[bar_idx]
+            current_time = price_df.index[bar_idx]
+            historical_df = price_df.iloc[:bar_idx + 1]
+
+            # Process existing orders
+            self.executor.process_bar(current_bar, current_time)
+
+            # Determine market context from price action
+            market_context = self._derive_market_context(historical_df)
+
+            # Get news if available
+            news_digest = None
+            if news_items_fn:
+                lookback_start = current_time - pd.Timedelta(days=7)
+                news_items = news_items_fn(lookback_start, current_time)
+                news_digest = {"items": news_items, "count": len(news_items)}
+
+            # ====== Run PopAgent Iteration ======
+
+            # 1. Each agent selects methods
+            agent_decisions = []
+            for role, pop in selector_workflow.populations.items():
+                for agent in pop.agents:
+                    # Record pre-selection state
+                    methods_available = list(agent.inventory)
+                    old_prefs = dict(agent.preferences)
+
+                    # Select methods
+                    agent.select_methods(market_context)
+
+                    # Log decision
+                    if logger:
+                        decision = AgentDecisionLog(
+                            timestamp=current_time.isoformat(),
+                            iteration=iteration_num,
+                            agent_id=agent.id,
+                            role=role.value,
+                            methods_available=methods_available,
+                            methods_selected=agent.current_selection,
+                            selection_scores=getattr(agent, '_last_scores', {}),
+                            preferences=old_prefs,
+                            context=market_context,
+                            reasoning=getattr(agent, '_last_reasoning', None),
+                            exploration_used=getattr(agent, '_used_exploration', False),
+                        )
+                        agent_decisions.append(decision)
+
+            # 2. Sample pipelines
+            pipelines = selector_workflow._sample_pipelines()
+
+            # 3. Evaluate each pipeline (simulated, but we'll execute best one for real)
+            pipeline_results = []
+            for pipeline in pipelines:
+                result = selector_workflow._evaluate_pipeline(
+                    pipeline=pipeline,
+                    price_data=historical_df,
+                    context=market_context,
+                    news_digest=news_digest,
+                )
+                if result:
+                    pipeline_results.append(result)
+
+            # 4. Find best pipeline
+            if pipeline_results:
+                best_result = max(pipeline_results, key=lambda r: r.pnl)
+                avg_pnl = np.mean([r.pnl for r in pipeline_results])
+
+                # Execute best pipeline through OrderExecutor
+                if best_result.success and best_result.pnl > 0:
+                    # Create execution summary from best pipeline
+                    exec_summary = self._create_execution_from_pipeline(
+                        best_result, current_bar, current_time
+                    )
+                    if exec_summary:
+                        self.executor.submit_order(exec_summary)
+
+                iteration_pnls.append(best_result.pnl)
+            else:
+                best_result = None
+                avg_pnl = 0.0
+                iteration_pnls.append(0.0)
+
+            # 5. Update preferences
+            selector_workflow._update_preferences(pipeline_results, market_context)
+
+            # 6. Score and transfer knowledge
+            selector_workflow._score_and_transfer()
+
+            # 7. Ensure diversity
+            for pop in selector_workflow.populations.values():
+                pop.ensure_diversity()
+
+            # Calculate diversity metrics
+            diversity_metrics = {}
+            for role, pop in selector_workflow.populations.items():
+                diversity_metrics[role.value] = DiversityMetrics(
+                    role=role.value,
+                    selection_diversity=pop.calculate_selection_diversity(),
+                    preference_entropy=0.0,  # TODO: calculate
+                    unique_methods_used=len(pop._get_method_usage()),
+                    total_methods_available=len(pop.config.inventory),
+                )
+
+            # Log iteration
+            iteration_duration_ms = (time.time() - iteration_start_time) * 1000
+
+            if logger:
+                pipeline_logs = [
+                    PipelineResultLog(
+                        pipeline_id=f"pipe_{i}",
+                        agents={
+                            "analyst": r.analyst_id,
+                            "researcher": r.researcher_id,
+                            "trader": r.trader_id,
+                            "risk": r.risk_id,
+                        },
+                        methods={
+                            "analyst": r.analyst_methods,
+                            "researcher": r.researcher_methods,
+                            "trader": r.trader_methods,
+                            "risk": r.risk_methods,
+                        },
+                        pnl=r.pnl,
+                        sharpe=r.sharpe,
+                        success=r.success,
+                    )
+                    for i, r in enumerate(pipeline_results)
+                ]
+
+                iteration_log = logger.create_iteration_log(
+                    iteration=iteration_num,
+                    market_context=market_context,
+                    agent_decisions=agent_decisions,
+                    pipeline_results=pipeline_logs,
+                    best_pipeline_id=f"pipe_best" if best_result else None,
+                    best_pnl=best_result.pnl if best_result else 0.0,
+                    avg_pnl=avg_pnl,
+                    knowledge_transfer=None,  # TODO: log transfers
+                    diversity_metrics=diversity_metrics,
+                    iteration_duration_ms=iteration_duration_ms,
+                )
+                logger.log_iteration(iteration_log)
+
+            # Store result
+            all_iteration_results.append({
+                "iteration": iteration_num,
+                "bar_idx": bar_idx,
+                "timestamp": current_time.isoformat(),
+                "best_pnl": best_result.pnl if best_result else 0.0,
+                "avg_pnl": avg_pnl,
+                "pipelines_evaluated": len(pipeline_results),
+                "market_context": market_context,
+            })
+
+            # Progress
+            if iteration_num % 10 == 0:
+                print(f"Iteration {iteration_num}: bar={bar_idx}/{len(price_df)}, "
+                      f"best_pnl={best_result.pnl if best_result else 0:.4f}, "
+                      f"capital={self.executor.current_capital:.2f}")
+
+            # Move to next iteration
+            bar_idx += iteration_bar_count
+
+        # Close remaining orders
+        final_bar = price_df.iloc[-1]
+        final_time = price_df.index[-1]
+        for order_exec in list(self.executor.open_orders.values()):
+            if order_exec.state.value == "filled":
+                self.executor.close_order(order_exec, "end_of_backtest", final_bar, final_time)
+
+        # Calculate final metrics
+        backtest_metrics = self._calculate_metrics(price_df)
+        learning_progress = selector_workflow.get_learning_progress()
+
+        # Finalize logger
+        if logger:
+            logger.finalize(selector_workflow.get_best_methods())
+
+        print(f"\n{'='*60}")
+        print(f"POPULATION BACKTEST COMPLETE")
+        print(f"{'='*60}")
+        print(f"Iterations: {iteration_num}")
+        print(f"Final Capital: ${self.executor.current_capital:.2f}")
+        print(f"Total Return: {backtest_metrics['total_return_pct']:.2f}%")
+        print(f"Sharpe Ratio: {backtest_metrics['sharpe_ratio']:.2f}")
+        print(f"Learning Improvement: {learning_progress.get('improvement', 0):.4f}")
+        print(f"{'='*60}\n")
+
+        return {
+            "mode": "population",
+            "iterations": iteration_num,
+            "backtest_metrics": backtest_metrics,
+            "learning_progress": learning_progress,
+            "iteration_results": all_iteration_results,
+            "best_methods": selector_workflow.get_best_methods(),
+            "method_popularity": selector_workflow.get_method_popularity(),
+        }
+
+    def _derive_market_context(self, price_df: pd.DataFrame) -> Dict[str, Any]:
+        """Derive market context from price action."""
+        if len(price_df) < 20:
+            return {"trend": "neutral", "volatility": 0.3, "regime": "normal"}
+
+        closes = price_df["close"].values
+
+        # Trend: compare recent to older prices
+        recent_avg = np.mean(closes[-5:])
+        older_avg = np.mean(closes[-20:-5])
+
+        if recent_avg > older_avg * 1.02:
+            trend = "bullish"
+        elif recent_avg < older_avg * 0.98:
+            trend = "bearish"
+        else:
+            trend = "neutral"
+
+        # Volatility: standard deviation of returns
+        returns = np.diff(closes) / closes[:-1]
+        volatility = np.std(returns[-20:]) if len(returns) >= 20 else 0.02
+
+        # Regime
+        if volatility > 0.04:
+            regime = "volatile"
+        elif volatility < 0.01:
+            regime = "quiet"
+        else:
+            regime = "normal"
+
+        return {
+            "trend": trend,
+            "volatility": float(volatility),
+            "regime": regime,
+            "recent_return": float((closes[-1] / closes[-5] - 1)) if len(closes) >= 5 else 0.0,
+        }
+
+    def _create_execution_from_pipeline(
+        self,
+        pipeline_result: "PipelineResult",
+        current_bar: pd.Series,
+        current_time: datetime,
+    ) -> Optional[ExecutionSummary]:
+        """Create an ExecutionSummary from a pipeline result."""
+        try:
+            current_price = float(current_bar["close"])
+
+            # Determine direction from PnL expectation
+            direction = "LONG" if pipeline_result.pnl > 0 else "SHORT"
+
+            # Set TP/SL based on volatility
+            atr_approx = current_price * 0.02  # Approximate 2% ATR
+
+            if direction == "LONG":
+                take_profit = current_price + 2 * atr_approx
+                stop_loss = current_price - 1 * atr_approx
+            else:
+                take_profit = current_price - 2 * atr_approx
+                stop_loss = current_price + 1 * atr_approx
+
+            return ExecutionSummary(
+                order_id=f"pop_{current_time.strftime('%Y%m%d_%H%M')}_{pipeline_result.trader_id}",
+                direction=direction,
+                order_type="MARKET",
+                entry_price=current_price,
+                take_profit=take_profit,
+                stop_loss=stop_loss,
+                position_size=0.05,  # Conservative 5% position
+                leverage=3.0,
+                confidence=abs(pipeline_result.pnl),
+                reasoning=f"PopAgent best pipeline: {pipeline_result.trader_methods}",
+            )
+        except Exception as e:
+            print(f"⚠️ Error creating execution: {e}")
+            return None
 
 
 def setup_validation_test_periods(

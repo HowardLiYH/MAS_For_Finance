@@ -156,6 +156,16 @@ pip install -e .
 
 # Run with method selection learning
 python -m trading_agents.cli selector --config configs/multi_asset.yaml
+
+# Run population backtest on historical data
+python -m trading_agents.cli backtest --symbol BTC --population-size 5
+
+# Start visualization dashboard
+python -m trading_agents.cli api --port 8000  # Backend
+cd dashboard && npm install && npm run dev     # Frontend
+
+# Export figures for NeurIPS paper
+python -m trading_agents.cli export --experiment-id <exp_id> --output-dir exports/neurips
 ```
 
 ### Configuration
@@ -208,19 +218,31 @@ Iteration N:
 
 ```
 trading_agents/
-├── population/                    # 🆕 Population-based method selection
+├── population/                    # Population-based method selection
 │   ├── selector.py                # MethodSelector class (core innovation)
 │   ├── inventories.py             # 15 methods per role
 │   ├── selector_workflow.py       # Selection-based workflow
-│   ├── base.py                    # Base population classes
-│   ├── transfer.py                # Knowledge transfer strategies
-│   ├── diversity.py               # Diversity preservation
-│   └── scoring.py                 # Shapley-based credit assignment
-│
+│   └── ...                        # Transfer, diversity, scoring
 ├── agents/                        # Agent implementations
 ├── inventory/                     # Method implementations
+├── backtesting/                   # Backtesting engine
+│   ├── engine.py                  # BacktestEngine with population support
+│   └── executor.py                # Order execution simulation
 ├── services/                      # LLM, events, notifications
+│   ├── experiment_logger.py       # Structured logging (JSONL)
+│   ├── scheduler.py               # 4-hour paper trading scheduler
+│   └── neurips_export.py          # Publication-ready exports
+├── api/                           # Dashboard API
+│   └── server.py                  # FastAPI + WebSocket server
 └── config/                        # Configuration management
+
+dashboard/                         # React Visualization Dashboard
+├── src/components/                # AgentPopulation, MethodInventory, etc.
+└── ...                            # Next.js app
+
+tests/                             # Test suite
+├── conftest.py                    # Pytest fixtures
+└── test_*.py                      # Mock and integration tests
 ```
 
 ---

@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 10, 14, 23;
+  --background-end-rgb: 17, 24, 39;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--background-start-rgb)),
+    rgb(var(--background-end-rgb))
+  );
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Glow effects */
+.glow-primary {
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.3);
+}
+
+.glow-success {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.glow-danger {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+/* Grid pattern background */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Agent card styles */
+.agent-card {
+  @apply relative overflow-hidden rounded-lg border border-white/10 bg-surface/50 backdrop-blur-sm;
+  transition: all 0.3s ease;
+}
+
+.agent-card:hover {
+  @apply border-primary/50;
+  transform: translateY(-2px);
+}
+
+.agent-card.best {
+  @apply border-success/50;
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+}
+
+/* Method pill styles */
+.method-pill {
+  @apply px-2 py-1 rounded-full text-xs font-mono;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.1), rgba(167, 139, 250, 0.1));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.method-pill.selected {
+  @apply bg-primary/20 border-primary/50 text-primary;
+}
+
+/* Heatmap cell */
+.heatmap-cell {
+  @apply w-8 h-8 rounded-sm transition-all duration-300;
+}
+
+/* Timeline styles */
+.timeline-dot {
+  @apply w-3 h-3 rounded-full bg-primary;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+}
+
+.timeline-line {
+  @apply w-0.5 bg-gradient-to-b from-primary/50 to-transparent;
+}
