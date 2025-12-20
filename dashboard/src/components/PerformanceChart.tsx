@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Activity, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Target, HelpCircle, Calendar } from 'lucide-react';
 import type { IterationLog } from '@/lib/types';
 
 interface StatCardProps {
@@ -18,13 +18,36 @@ interface StatCardProps {
   value: string;
   change?: number;
   icon: React.ReactNode;
+  tooltip?: string;
 }
 
-function StatCard({ label, value, change, icon }: StatCardProps) {
+// Tooltip component
+function MetricTooltip({ text, children }: { text: string; children: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex items-center" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-background border border-white/10 rounded text-xs text-white whitespace-nowrap z-50 max-w-[200px] text-center">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function StatCard({ label, value, change, icon, tooltip }: StatCardProps) {
   return (
     <div className="bg-surface/50 rounded-lg p-4 border border-white/5">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-muted">{label}</span>
+        <span className="text-xs text-muted flex items-center gap-1">
+          {label}
+          {tooltip && (
+            <MetricTooltip text={tooltip}>
+              <HelpCircle className="w-3 h-3 cursor-help" />
+            </MetricTooltip>
+          )}
+        </span>
         <span className="text-muted/50">{icon}</span>
       </div>
       <div className="flex items-end gap-2">
@@ -75,11 +98,29 @@ export default function PerformanceChart({ iterations }: PerformanceChartProps) 
     };
   }, [iterations]);
 
+  // Get date range from iterations
+  const dateRange = useMemo(() => {
+    if (iterations.length === 0) return null;
+    const first = iterations[0]?.timestamp;
+    const last = iterations[iterations.length - 1]?.timestamp;
+    return { start: first, end: last };
+  }, [iterations]);
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-white">
-        Performance Metrics
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-white">
+          Performance Metrics
+        </h2>
+        {dateRange && (
+          <div className="flex items-center gap-2 text-xs text-muted bg-surface/30 px-3 py-1.5 rounded-lg">
+            <Calendar className="w-3 h-3" />
+            <span>{dateRange.start} → {dateRange.end}</span>
+            <span className="text-white/50">|</span>
+            <span>{iterations.length * 4}h of data</span>
+          </div>
+        )}
+      </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4">
@@ -87,22 +128,26 @@ export default function PerformanceChart({ iterations }: PerformanceChartProps) 
           label="Total Return"
           value={`${stats.totalPnl >= 0 ? '+' : ''}${stats.totalPnl.toFixed(2)}%`}
           icon={<TrendingUp className="w-4 h-4" />}
+          tooltip="Cumulative profit/loss from all trades. Positive = profitable."
         />
         <StatCard
           label="Win Rate"
           value={`${stats.winRate.toFixed(0)}%`}
           icon={<Target className="w-4 h-4" />}
+          tooltip="Percentage of iterations with positive PnL. >50% is good."
         />
         <StatCard
           label="Max Drawdown"
           value={`-${stats.maxDrawdown.toFixed(2)}%`}
           icon={<TrendingDown className="w-4 h-4" />}
+          tooltip="Largest peak-to-trough decline. Lower is better. <10% is excellent."
         />
         <StatCard
           label="Learning Improvement"
           value={`${stats.improvement >= 0 ? '+' : ''}${stats.improvement.toFixed(0)}%`}
           change={stats.improvement}
           icon={<Activity className="w-4 h-4" />}
+          tooltip="Compares first 10 vs last 10 iterations. Positive = agents are learning."
         />
       </div>
 

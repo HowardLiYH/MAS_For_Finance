@@ -220,7 +220,7 @@ export default function Dashboard() {
       {/* Footer */}
       <footer className="mt-12 pt-6 border-t border-white/5 text-center text-xs text-muted">
         <p>PopAgent: Population-Based Multi-Agent LLM Trading System</p>
-        <p className="mt-1">NeurIPS 2025 Submission</p>
+        <p className="mt-1">Made by Yuhao Li</p>
       </footer>
     </div>
   );
