@@ -258,12 +258,23 @@ tests/                             # Test suite
 * (2025.12.19) **Admin Agent & Paper Trading v0.4.0**
 * (2025.12.19) **Bocha Search Integration v0.4.1**
 * (2025.12.19) **PopAgent v0.5.0: Population-Based Learning**
-* (2025.12.19) **PopAgent v0.6.0: Adaptive Method Selection** 🆕
+* (2025.12.19) **PopAgent v0.6.0: Adaptive Method Selection**
    * Agents now SELECT methods from inventory (not fixed strategies)
    * Extended inventories: 15/12/10/10 methods per role
    * Selection learning via UCB + reinforcement learning
    * Preference-based knowledge transfer
    * Context-aware method selection
+* (2025.12.19) **PopAgent v0.7.0: RL Enhancements**
+   * Thompson Sampling for Bayesian exploration
+   * Contextual baselines for regime-aware learning
+   * Multi-step returns for temporal credit assignment
+* (2025.12.20) **PopAgent v0.8.0: Testing & Visualization** 🆕
+   * Complete test suite with mock data fixtures
+   * Population-based backtesting (`run_population_backtest`)
+   * React dashboard for visualization (Next.js + Tailwind)
+   * FastAPI backend with WebSocket live updates
+   * 4-hour paper trading scheduler
+   * NeurIPS export utilities (figures, tables, traces)
 
 ---
 
