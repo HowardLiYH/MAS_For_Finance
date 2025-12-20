@@ -154,8 +154,14 @@ Examples:
     backtest_parser.add_argument(
         "--symbol",
         type=str,
-        default="BTC",
-        help="Symbol to backtest (default: BTC)"
+        default=None,
+        help="Single symbol to backtest (e.g., BTC). Use --symbols for multi-asset."
+    )
+    backtest_parser.add_argument(
+        "--symbols",
+        type=str,
+        default=None,
+        help="Comma-separated symbols for multi-asset backtest (e.g., BTC,ETH,SOL,DOGE,XRP)"
     )
     backtest_parser.add_argument(
         "--start",
@@ -436,7 +442,7 @@ def _run_population_mode(args):
 
 
 def _run_backtest_mode(args):
-    """Run population-based historical backtest."""
+    """Run population-based historical backtest (single or multi-asset)."""
     from datetime import datetime, timezone
     from pathlib import Path
     import pandas as pd
@@ -449,8 +455,22 @@ def _run_backtest_mode(args):
     from .backtesting import BacktestEngine
     from .services.experiment_logger import ExperimentLogger
 
+    # Determine symbols (multi-asset or single)
+    if args.symbols:
+        symbols = [s.strip().upper() for s in args.symbols.split(",")]
+        is_multi_asset = True
+    elif args.symbol:
+        symbols = [args.symbol.upper()]
+        is_multi_asset = False
+    else:
+        symbols = ["BTC"]  # Default
+        is_multi_asset = False
+
     print(f"\n{'='*60}")
-    print("📊 POPULATION BACKTEST")
+    if is_multi_asset:
+        print("📊 MULTI-ASSET POPULATION BACKTEST")
+    else:
+        print("📊 POPULATION BACKTEST")
     print(f"{'='*60}")
 
     # Show inventory sizes
@@ -459,28 +479,29 @@ def _run_backtest_mode(args):
     for role, size in inv_sizes.items():
         print(f"  {role.capitalize()}: {size} methods")
 
-    # Load price data
-    symbol = args.symbol.upper()
-    csv_path = Path(f"data/bybit/Bybit_{symbol}.csv")
+    # Load price data for all symbols
+    price_data = {}
+    for symbol in symbols:
+        csv_path = Path(f"data/bybit/Bybit_{symbol}.csv")
+        if not csv_path.exists():
+            print(f"\n❌ Error: Price data not found at {csv_path}")
+            print(f"   Available symbols: BTC, ETH, SOL, DOGE, XRP")
+            return
 
-    if not csv_path.exists():
-        print(f"\n❌ Error: Price data not found at {csv_path}")
-        print(f"   Available symbols: BTC, ETH, SOL, DOGE, XRP")
-        return
+        print(f"\nLoading {symbol} price data from {csv_path}...")
+        df = pd.read_csv(csv_path)
 
-    print(f"\nLoading {symbol} price data from {csv_path}...")
-    price_df = pd.read_csv(csv_path)
+        # Handle timestamp column
+        if "timestamp_utc" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp_utc"], utc=True)
+        elif "timestamp" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
 
-    # Handle timestamp column
-    if "timestamp_utc" in price_df.columns:
-        price_df["timestamp"] = pd.to_datetime(price_df["timestamp_utc"], utc=True)
-    elif "timestamp" in price_df.columns:
-        price_df["timestamp"] = pd.to_datetime(price_df["timestamp"], utc=True)
+        df.set_index("timestamp", inplace=True)
+        df.sort_index(inplace=True)
 
-    price_df.set_index("timestamp", inplace=True)
-    price_df.sort_index(inplace=True)
-
-    print(f"Loaded {len(price_df)} bars ({price_df.index[0]} to {price_df.index[-1]})")
+        price_data[symbol] = df
+        print(f"  Loaded {len(df)} bars ({df.index[0]} to {df.index[-1]})")
 
     # Parse dates
     start_date = None
@@ -505,11 +526,13 @@ def _run_backtest_mode(args):
     )
 
     # Create logger
+    symbols_str = "_".join(symbols)
     logger = ExperimentLogger(
-        experiment_id=f"backtest_{symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        experiment_id=f"backtest_{symbols_str}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         log_dir=args.log_dir,
         config={
-            "symbol": symbol,
+            "symbols": symbols,
+            "multi_asset": is_multi_asset,
             "population_size": args.population_size,
             "initial_capital": args.capital,
             "start_date": args.start,
@@ -517,24 +540,39 @@ def _run_backtest_mode(args):
         }
     )
 
-    print(f"\nPopulation: {args.population_size} agents per role")
+    print(f"\nSymbols: {', '.join(symbols)}")
+    print(f"Multi-asset mode: {is_multi_asset}")
+    print(f"Population: {args.population_size} agents per role")
     print(f"Initial capital: ${args.capital:,.2f}")
     print(f"Logging to: {args.log_dir}")
     print("\nStarting backtest...\n")
 
-    # Run population backtest
-    results = engine.run_population_backtest(
-        price_df=price_df,
-        selector_workflow=workflow,
-        start_date=start_date,
-        end_date=end_date,
-        iteration_bar_count=1,  # Every 4h bar
-        logger=logger,
-    )
+    # Run appropriate backtest mode
+    if is_multi_asset:
+        results = engine.run_multi_asset_backtest(
+            price_data=price_data,
+            selector_workflow=workflow,
+            start_date=start_date,
+            end_date=end_date,
+            iteration_bar_count=1,
+            logger=logger,
+        )
+    else:
+        results = engine.run_population_backtest(
+            price_df=price_data[symbols[0]],
+            selector_workflow=workflow,
+            start_date=start_date,
+            end_date=end_date,
+            iteration_bar_count=1,
+            logger=logger,
+        )
 
     # Print results
     print(f"\n{'='*60}")
-    print("BACKTEST RESULTS")
+    if is_multi_asset:
+        print("MULTI-ASSET BACKTEST RESULTS")
+    else:
+        print("BACKTEST RESULTS")
     print(f"{'='*60}")
 
     metrics = results["backtest_metrics"]
@@ -545,6 +583,18 @@ def _run_backtest_mode(args):
     print(f"  Sharpe Ratio: {metrics['sharpe_ratio']:.2f}")
     print(f"  Max Drawdown: {metrics['max_drawdown_pct']:.2f}%")
     print(f"  Win Rate: {metrics['win_rate_pct']:.2f}%")
+
+    # Multi-asset specific metrics
+    if is_multi_asset and "cross_asset_metrics" in results:
+        print(f"\n🔗 Cross-Asset Metrics:")
+        cam = results["cross_asset_metrics"]
+        print(f"  Avg Correlation: {cam.get('avg_correlation', 0):.3f}")
+        print(f"  BTC Dominance: {cam.get('btc_dominance', 0):.1%}")
+        print(f"  Portfolio Volatility: {cam.get('portfolio_volatility', 0):.3f}")
+        if "per_asset_return" in cam:
+            print(f"  Per-Asset Returns:")
+            for sym, ret in cam["per_asset_return"].items():
+                print(f"    {sym}: {ret:.2%}")
 
     print(f"\n🧬 Learning Progress:")
     progress = results["learning_progress"]

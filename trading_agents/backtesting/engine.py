@@ -627,6 +627,513 @@ class BacktestEngine:
             return None
 
 
+    def run_multi_asset_backtest(
+        self,
+        price_data: Dict[str, pd.DataFrame],
+        selector_workflow: "SelectorWorkflow",
+        news_items_fn: Optional[Callable[[datetime, datetime], List[Dict[str, Any]]]] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        iteration_bar_count: int = 1,
+        logger: Optional["ExperimentLogger"] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run multi-asset backtest with PopAgent selector workflow.
+
+        Includes cross-asset features:
+        - Correlation analysis between assets
+        - BTC dominance tracking
+        - Portfolio-level metrics
+        - Cross-asset signal generation
+
+        Args:
+            price_data: Dict mapping symbol -> price DataFrame
+            selector_workflow: SelectorWorkflow instance with agent populations
+            news_items_fn: Function to get news items for a time period
+            start_date: Start of backtest period
+            end_date: End of backtest period
+            iteration_bar_count: Number of bars per iteration (default: 1)
+            logger: Optional ExperimentLogger for detailed logging
+
+        Returns:
+            Dict with multi-asset backtest results and cross-asset metrics
+        """
+        from ..population.selector_workflow import PipelineResult
+        from ..services.experiment_logger import (
+            AgentDecisionLog,
+            PipelineResultLog,
+            DiversityMetrics,
+        )
+
+        symbols = list(price_data.keys())
+        print(f"\n{'='*60}")
+        print(f"🌐 MULTI-ASSET POPULATION BACKTEST")
+        print(f"{'='*60}")
+        print(f"Assets: {', '.join(symbols)}")
+
+        # Align all price data to common index
+        aligned_data = self._align_multi_asset_data(price_data, start_date, end_date)
+        common_index = aligned_data[symbols[0]].index
+
+        print(f"Period: {common_index[0]} → {common_index[-1]}")
+        print(f"Bars: {len(common_index)}, Iteration every {iteration_bar_count} bars")
+        print(f"Population size: {selector_workflow.config.population_size} per role")
+        print(f"{'='*60}\n")
+
+        # Track per-asset executors and results
+        asset_executors = {sym: OrderExecutor(initial_capital=self.initial_capital / len(symbols))
+                          for sym in symbols}
+        all_iteration_results = []
+        iteration_pnls = []
+
+        # Cross-asset tracking
+        correlation_history = []
+        btc_dominance_history = []
+
+        # Process bars in iteration chunks
+        bar_idx = 20  # Start after minimum lookback for cross-asset calculations
+        iteration_num = 0
+
+        while bar_idx < len(common_index):
+            iteration_start_time = time.time()
+            iteration_num += 1
+
+            current_time = common_index[bar_idx]
+
+            # Get historical data for all assets
+            historical_data = {sym: aligned_data[sym].iloc[:bar_idx + 1] for sym in symbols}
+            current_bars = {sym: aligned_data[sym].iloc[bar_idx] for sym in symbols}
+
+            # Process existing orders for each asset
+            for sym in symbols:
+                asset_executors[sym].process_bar(current_bars[sym], current_time)
+
+            # ====== Calculate Cross-Asset Features ======
+            cross_asset_context = self._calculate_cross_asset_features(
+                historical_data, symbols, current_time
+            )
+
+            # Derive per-asset market context
+            per_asset_context = {}
+            for sym in symbols:
+                ctx = self._derive_market_context(historical_data[sym])
+                ctx["symbol"] = sym
+                per_asset_context[sym] = ctx
+
+            # Combine into unified market context
+            market_context = {
+                "multi_asset": True,
+                "symbols": symbols,
+                "per_asset": per_asset_context,
+                "cross_asset": cross_asset_context,
+                "timestamp": current_time.isoformat(),
+            }
+
+            # Track cross-asset metrics
+            correlation_history.append(cross_asset_context.get("avg_correlation", 0))
+            btc_dominance_history.append(cross_asset_context.get("btc_dominance", 0))
+
+            # Get news if available
+            news_digest = None
+            if news_items_fn:
+                lookback_start = current_time - pd.Timedelta(days=7)
+                news_items = news_items_fn(lookback_start, current_time)
+                news_digest = {"items": news_items, "count": len(news_items)}
+
+            # ====== Run PopAgent Iteration ======
+            agent_decisions = []
+            for role, pop in selector_workflow.populations.items():
+                for agent in pop.agents:
+                    methods_available = list(agent.inventory)
+                    old_prefs = dict(agent.preferences)
+                    agent.select_methods(market_context)
+
+                    if logger:
+                        decision = AgentDecisionLog(
+                            timestamp=current_time.isoformat(),
+                            iteration=iteration_num,
+                            agent_id=agent.id,
+                            role=role.value,
+                            methods_available=methods_available,
+                            methods_selected=agent.current_selection,
+                            selection_scores=getattr(agent, '_last_scores', {}),
+                            preferences=old_prefs,
+                            context=market_context,
+                            reasoning=getattr(agent, '_last_reasoning', None),
+                            exploration_used=getattr(agent, '_used_exploration', False),
+                        )
+                        agent_decisions.append(decision)
+
+            # Sample and evaluate pipelines
+            pipelines = selector_workflow._sample_pipelines()
+            pipeline_results = []
+
+            for pipeline in pipelines:
+                # For multi-asset, evaluate on primary asset (BTC) or aggregate
+                primary_asset = "BTC" if "BTC" in symbols else symbols[0]
+                result = selector_workflow._evaluate_pipeline(
+                    pipeline=pipeline,
+                    price_data=historical_data[primary_asset],
+                    context=market_context,
+                    news_digest=news_digest,
+                )
+                if result:
+                    pipeline_results.append(result)
+
+            # Find best pipeline and execute across assets
+            iteration_pnl = 0.0
+            if pipeline_results:
+                best_result = max(pipeline_results, key=lambda r: r.pnl)
+                avg_pnl = np.mean([r.pnl for r in pipeline_results])
+
+                # Execute best pipeline for each asset with cross-asset adjustments
+                if best_result.success:
+                    for sym in symbols:
+                        # Adjust position based on correlation and per-asset context
+                        asset_weight = self._calculate_asset_weight(
+                            sym, cross_asset_context, per_asset_context[sym]
+                        )
+
+                        if asset_weight > 0.05:  # Only trade if weight is significant
+                            exec_summary = self._create_multi_asset_execution(
+                                best_result, current_bars[sym], current_time, sym, asset_weight
+                            )
+                            if exec_summary:
+                                asset_executors[sym].submit_order(exec_summary)
+
+                # Sum PnL across assets
+                for sym in symbols:
+                    iteration_pnl += asset_executors[sym].current_capital - (self.initial_capital / len(symbols))
+
+                iteration_pnls.append(best_result.pnl)
+            else:
+                best_result = None
+                avg_pnl = 0.0
+                iteration_pnls.append(0.0)
+
+            # Update preferences and transfer knowledge
+            selector_workflow._update_preferences(pipeline_results, market_context)
+            selector_workflow._score_and_transfer()
+
+            for pop in selector_workflow.populations.values():
+                pop.ensure_diversity()
+
+            # Calculate diversity metrics
+            diversity_metrics = {}
+            for role, pop in selector_workflow.populations.items():
+                diversity_metrics[role.value] = DiversityMetrics(
+                    role=role.value,
+                    selection_diversity=pop.calculate_selection_diversity(),
+                    preference_entropy=0.0,
+                    unique_methods_used=len(pop._get_method_usage()),
+                    total_methods_available=len(pop.config.inventory),
+                )
+
+            iteration_duration_ms = (time.time() - iteration_start_time) * 1000
+
+            # Store result
+            all_iteration_results.append({
+                "iteration": iteration_num,
+                "bar_idx": bar_idx,
+                "timestamp": current_time.isoformat(),
+                "best_pnl": best_result.pnl if best_result else 0.0,
+                "avg_pnl": avg_pnl,
+                "pipelines_evaluated": len(pipeline_results),
+                "market_context": market_context,
+                "cross_asset_context": cross_asset_context,
+            })
+
+            # Progress
+            if iteration_num % 10 == 0:
+                total_capital = sum(ex.current_capital for ex in asset_executors.values())
+                print(f"Iteration {iteration_num}: bar={bar_idx}/{len(common_index)}, "
+                      f"best_pnl={best_result.pnl if best_result else 0:.4f}, "
+                      f"total_capital={total_capital:.2f}")
+
+            bar_idx += iteration_bar_count
+
+        # Close remaining orders for all assets
+        final_time = common_index[-1]
+        for sym in symbols:
+            final_bar = aligned_data[sym].iloc[-1]
+            for order_exec in list(asset_executors[sym].open_orders.values()):
+                if order_exec.state.value == "filled":
+                    asset_executors[sym].close_order(order_exec, "end_of_backtest", final_bar, final_time)
+
+        # Calculate aggregate metrics
+        total_final_capital = sum(ex.current_capital for ex in asset_executors.values())
+        total_initial_capital = self.initial_capital
+
+        # Collect all closed orders
+        all_closed_orders = []
+        for sym, executor in asset_executors.items():
+            for order in executor.closed_orders:
+                order.symbol = sym  # Tag with symbol
+                all_closed_orders.append(order)
+
+        # Calculate per-asset returns
+        per_asset_return = {
+            sym: (asset_executors[sym].current_capital - (total_initial_capital / len(symbols)))
+                 / (total_initial_capital / len(symbols))
+            for sym in symbols
+        }
+
+        # Cross-asset metrics
+        cross_asset_metrics = {
+            "avg_correlation": np.mean(correlation_history) if correlation_history else 0,
+            "btc_dominance": np.mean(btc_dominance_history) if btc_dominance_history else 0,
+            "portfolio_volatility": np.std(iteration_pnls) if iteration_pnls else 0,
+            "per_asset_return": per_asset_return,
+            "correlation_trend": self._calculate_trend(correlation_history),
+        }
+
+        # Combine into backtest metrics
+        total_trades = len(all_closed_orders)
+        total_return = (total_final_capital - total_initial_capital) / total_initial_capital
+
+        pnls = [o.pnl for o in all_closed_orders]
+        winning_trades = [p for p in pnls if p > 0]
+        losing_trades = [p for p in pnls if p < 0]
+
+        backtest_metrics = {
+            "total_trades": total_trades,
+            "final_capital": total_final_capital,
+            "total_return": total_return,
+            "total_return_pct": total_return * 100,
+            "sharpe_ratio": self._calculate_sharpe(iteration_pnls),
+            "max_drawdown": self._calculate_max_drawdown(iteration_pnls, total_initial_capital),
+            "max_drawdown_pct": self._calculate_max_drawdown(iteration_pnls, total_initial_capital) * 100,
+            "win_rate": len(winning_trades) / total_trades if total_trades > 0 else 0,
+            "win_rate_pct": (len(winning_trades) / total_trades * 100) if total_trades > 0 else 0,
+            "avg_win": np.mean(winning_trades) if winning_trades else 0,
+            "avg_loss": np.mean(losing_trades) if losing_trades else 0,
+            "profit_factor": abs(sum(winning_trades) / sum(losing_trades)) if losing_trades else float('inf'),
+        }
+
+        learning_progress = selector_workflow.get_learning_progress()
+
+        if logger:
+            logger.finalize(selector_workflow.get_best_methods())
+
+        print(f"\n{'='*60}")
+        print(f"MULTI-ASSET POPULATION BACKTEST COMPLETE")
+        print(f"{'='*60}")
+        print(f"Iterations: {iteration_num}")
+        print(f"Assets: {', '.join(symbols)}")
+        print(f"Final Capital: ${total_final_capital:.2f}")
+        print(f"Total Return: {backtest_metrics['total_return_pct']:.2f}%")
+        print(f"Sharpe Ratio: {backtest_metrics['sharpe_ratio']:.2f}")
+        print(f"Avg Correlation: {cross_asset_metrics['avg_correlation']:.3f}")
+        print(f"{'='*60}\n")
+
+        return {
+            "mode": "multi_asset_population",
+            "symbols": symbols,
+            "iterations": iteration_num,
+            "backtest_metrics": backtest_metrics,
+            "cross_asset_metrics": cross_asset_metrics,
+            "learning_progress": learning_progress,
+            "iteration_results": all_iteration_results,
+            "best_methods": selector_workflow.get_best_methods(),
+            "method_popularity": selector_workflow.get_method_popularity(),
+        }
+
+    def _align_multi_asset_data(
+        self,
+        price_data: Dict[str, pd.DataFrame],
+        start_date: Optional[datetime],
+        end_date: Optional[datetime],
+    ) -> Dict[str, pd.DataFrame]:
+        """Align all asset DataFrames to a common index."""
+        aligned = {}
+
+        # Find common date range
+        all_indices = [df.index for df in price_data.values()]
+        common_start = max(idx.min() for idx in all_indices)
+        common_end = min(idx.max() for idx in all_indices)
+
+        if start_date and start_date > common_start:
+            common_start = start_date
+        if end_date and end_date < common_end:
+            common_end = end_date
+
+        for sym, df in price_data.items():
+            mask = (df.index >= common_start) & (df.index <= common_end)
+            aligned[sym] = df.loc[mask].copy()
+
+        return aligned
+
+    def _calculate_cross_asset_features(
+        self,
+        historical_data: Dict[str, pd.DataFrame],
+        symbols: List[str],
+        current_time: datetime,
+    ) -> Dict[str, Any]:
+        """Calculate cross-asset features for market context."""
+        features = {}
+
+        # Get returns for correlation
+        returns = {}
+        for sym in symbols:
+            df = historical_data[sym]
+            if len(df) > 1:
+                returns[sym] = df["close"].pct_change().dropna().values[-20:]  # Last 20 bars
+
+        # Calculate pairwise correlations
+        correlations = []
+        for i, sym1 in enumerate(symbols):
+            for sym2 in symbols[i+1:]:
+                if sym1 in returns and sym2 in returns:
+                    min_len = min(len(returns[sym1]), len(returns[sym2]))
+                    if min_len > 5:
+                        corr = np.corrcoef(returns[sym1][-min_len:], returns[sym2][-min_len:])[0, 1]
+                        if not np.isnan(corr):
+                            correlations.append(corr)
+                            features[f"corr_{sym1}_{sym2}"] = corr
+
+        features["avg_correlation"] = np.mean(correlations) if correlations else 0
+
+        # BTC dominance (if BTC is in the mix)
+        if "BTC" in symbols:
+            btc_df = historical_data["BTC"]
+            total_volume = sum(historical_data[sym]["volume"].iloc[-1] for sym in symbols)
+            btc_volume = btc_df["volume"].iloc[-1]
+            features["btc_dominance"] = btc_volume / total_volume if total_volume > 0 else 0.5
+
+            # BTC trend influence
+            btc_returns = btc_df["close"].pct_change().dropna().values[-5:]
+            features["btc_momentum"] = np.mean(btc_returns) if len(btc_returns) > 0 else 0
+
+        # Sector rotation signals (relative strength)
+        relative_strength = {}
+        for sym in symbols:
+            df = historical_data[sym]
+            if len(df) > 5:
+                rs = df["close"].iloc[-1] / df["close"].iloc[-5] - 1
+                relative_strength[sym] = rs
+
+        if relative_strength:
+            avg_rs = np.mean(list(relative_strength.values()))
+            for sym, rs in relative_strength.items():
+                features[f"relative_strength_{sym}"] = rs - avg_rs
+
+            # Leader/laggard detection
+            sorted_rs = sorted(relative_strength.items(), key=lambda x: x[1], reverse=True)
+            features["leader"] = sorted_rs[0][0]
+            features["laggard"] = sorted_rs[-1][0]
+
+        # Flow analysis (volume changes)
+        volume_changes = {}
+        for sym in symbols:
+            df = historical_data[sym]
+            if len(df) > 5:
+                recent_vol = df["volume"].iloc[-5:].mean()
+                older_vol = df["volume"].iloc[-20:-5].mean() if len(df) > 20 else recent_vol
+                volume_changes[sym] = (recent_vol / older_vol - 1) if older_vol > 0 else 0
+
+        features["volume_flow"] = volume_changes
+
+        return features
+
+    def _calculate_asset_weight(
+        self,
+        symbol: str,
+        cross_asset_context: Dict[str, Any],
+        asset_context: Dict[str, Any],
+    ) -> float:
+        """Calculate position weight for an asset based on cross-asset signals."""
+        base_weight = 1.0 / len(cross_asset_context.get("volume_flow", {symbol: 1}))
+
+        # Adjust based on relative strength
+        rs_key = f"relative_strength_{symbol}"
+        if rs_key in cross_asset_context:
+            rs = cross_asset_context[rs_key]
+            # Overweight leaders, underweight laggards
+            base_weight *= (1 + rs * 2)  # Scale factor
+
+        # Reduce weight if high correlation (diversification)
+        avg_corr = cross_asset_context.get("avg_correlation", 0.5)
+        if avg_corr > 0.8:
+            base_weight *= 0.7  # Reduce exposure in high-correlation environment
+
+        # Boost weight for momentum assets
+        if asset_context.get("trend") == "bullish":
+            base_weight *= 1.2
+        elif asset_context.get("trend") == "bearish":
+            base_weight *= 0.8
+
+        return max(0, min(1, base_weight))  # Clamp to [0, 1]
+
+    def _create_multi_asset_execution(
+        self,
+        pipeline_result: "PipelineResult",
+        current_bar: pd.Series,
+        current_time: datetime,
+        symbol: str,
+        weight: float,
+    ) -> Optional[ExecutionSummary]:
+        """Create an ExecutionSummary for a specific asset in multi-asset mode."""
+        try:
+            current_price = float(current_bar["close"])
+            direction = "LONG" if pipeline_result.pnl > 0 else "SHORT"
+
+            atr_approx = current_price * 0.02
+
+            if direction == "LONG":
+                take_profit = current_price + 2 * atr_approx
+                stop_loss = current_price - 1 * atr_approx
+            else:
+                take_profit = current_price - 2 * atr_approx
+                stop_loss = current_price + 1 * atr_approx
+
+            return ExecutionSummary(
+                order_id=f"multi_{symbol}_{current_time.strftime('%Y%m%d_%H%M')}_{pipeline_result.trader_id}",
+                direction=direction,
+                order_type="MARKET",
+                entry_price=current_price,
+                take_profit=take_profit,
+                stop_loss=stop_loss,
+                position_size=0.05 * weight,  # Weighted position
+                leverage=3.0,
+                confidence=abs(pipeline_result.pnl) * weight,
+                reasoning=f"Multi-asset {symbol}: weight={weight:.2f}, methods={pipeline_result.trader_methods}",
+            )
+        except Exception as e:
+            print(f"⚠️ Error creating multi-asset execution for {symbol}: {e}")
+            return None
+
+    def _calculate_sharpe(self, pnls: List[float]) -> float:
+        """Calculate Sharpe ratio from PnL series."""
+        if len(pnls) < 2 or np.std(pnls) == 0:
+            return 0.0
+        return np.sqrt(2190) * np.mean(pnls) / np.std(pnls)
+
+    def _calculate_max_drawdown(self, pnls: List[float], initial_capital: float) -> float:
+        """Calculate maximum drawdown from PnL series."""
+        if not pnls:
+            return 0.0
+
+        capital_curve = [initial_capital]
+        for pnl in pnls:
+            capital_curve.append(capital_curve[-1] + pnl)
+
+        running_max = np.maximum.accumulate(capital_curve)
+        drawdowns = (np.array(capital_curve) - running_max) / running_max
+        return abs(np.min(drawdowns))
+
+    def _calculate_trend(self, values: List[float]) -> str:
+        """Calculate trend direction of a series."""
+        if len(values) < 5:
+            return "neutral"
+        recent = np.mean(values[-5:])
+        older = np.mean(values[:-5]) if len(values) > 5 else recent
+        if recent > older * 1.05:
+            return "increasing"
+        elif recent < older * 0.95:
+            return "decreasing"
+        return "stable"
+
+
 def setup_validation_test_periods(
     year: int = 2024,
     validation_month: int = 8,  # August
