@@ -17,7 +17,7 @@ function generateNarrative(decision: AgentDecision): string {
   const vol = Math.round((decision.context.volatility || 0.02) * 100);
   const regime = decision.context.regime || 'normal';
   const methods = decision.methods_selected;
-  
+
   const roleDescriptions: Record<string, string> = {
     analyst: 'feature engineering and trend detection',
     researcher: 'forecasting and market analysis',
@@ -52,7 +52,7 @@ function generateNarrative(decision: AgentDecision): string {
 
   // Build narrative
   let narrative = `The ${role} agent observes a ${trend} market with ${vol}% volatility in a ${regime} regime. `;
-  
+
   if (trend === 'bullish' && vol < 30) {
     narrative += `Given the favorable conditions, it focuses on ${roleDescriptions[role]}. `;
   } else if (trend === 'bearish') {
@@ -220,7 +220,7 @@ export default function ReflectionPanel({ decisions, selectedAgentId }: Reflecti
                           <span className="text-xs font-medium text-warning">Decision Narrative</span>
                         </div>
                         <p className="text-sm text-white/90 leading-relaxed">
-                          {generateNarrative(decision).split('**').map((part, i) => 
+                          {generateNarrative(decision).split('**').map((part, i) =>
                             i % 2 === 1 ? <strong key={i} className="text-primary">{part}</strong> : part
                           )}
                         </p>
