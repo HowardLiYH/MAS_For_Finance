@@ -27,3 +27,4 @@ __pycache__/
 .env
 data/
 .DS_Store
+logs/

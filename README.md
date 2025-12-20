@@ -148,24 +148,62 @@ Each role has **10-15 methods** available, but agents only select **3** at a tim
 
 ## ⚙️ Quick Start
 
-### Method Selection Mode (Recommended)
+### Step 1: Create Conda Environment (Recommended)
 ```bash
-# Setup
-python -m venv .venv && source .venv/bin/activate
+# Create and activate conda environment
+conda create -n mas python=3.11 -y
+conda activate mas
+
+# Install core packages
+conda install pandas numpy matplotlib requests pyyaml -y
+conda install -c conda-forge openai -y
+
+# Install project
+cd /path/to/MAS_Final_With_Agents
 pip install -e .
+```
 
-# Run with method selection learning
-python -m trading_agents.cli selector --config configs/multi_asset.yaml
+### Step 2: Run Population Backtest
+```bash
+# Single asset backtest
+python -m trading_agents.cli backtest --symbol BTC
 
-# Run population backtest on historical data
-python -m trading_agents.cli backtest --symbol BTC --population-size 5
+# Multi-asset backtest
+python -m trading_agents.cli backtest --symbols BTC,ETH,SOL,DOGE,XRP
 
-# Start visualization dashboard
-python -m trading_agents.cli api --port 8000  # Backend
-cd dashboard && npm install && npm run dev     # Frontend
+# With options
+python -m trading_agents.cli backtest --symbol BTC \
+    --population-size 5 \
+    --capital 10000 \
+    --start 2024-01-01 \
+    --end 2024-06-01
+```
 
-# Export figures for NeurIPS paper
+### Step 3: Visualization Dashboard (Optional)
+
+**Terminal 1 - Start API server:**
+```bash
+conda activate mas
+python -m trading_agents.cli api --port 8000
+```
+
+**Terminal 2 - Start React dashboard:**
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000** in your browser.
+
+### Step 4: Export for NeurIPS Paper
+```bash
 python -m trading_agents.cli export --experiment-id <exp_id> --output-dir exports/neurips
+```
+
+### Alternative: Method Selection Learning Mode
+```bash
+python -m trading_agents.cli selector --config configs/multi_asset.yaml
 ```
 
 ### Configuration

@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import pandas as pd
 
-from ..models.types import ExecutionSummary
+from ..models import ExecutionSummary
 
 
 class OrderState(Enum):

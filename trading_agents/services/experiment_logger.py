@@ -13,6 +13,24 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import uuid
 
+import numpy as np
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, (datetime,)):
+            return obj.isoformat()
+        return super().default(obj)
+
 
 # =============================================================================
 # Log Data Classes
@@ -128,7 +146,7 @@ class IterationLog:
         return result
 
     def to_json(self) -> str:
-        return json.dumps(self.to_dict())
+        return json.dumps(self.to_dict(), cls=NumpyEncoder)
 
 
 @dataclass
@@ -158,7 +176,7 @@ class ExperimentSummary:
         return asdict(self)
 
     def to_json(self) -> str:
-        return json.dumps(self.to_dict(), indent=2)
+        return json.dumps(self.to_dict(), indent=2, cls=NumpyEncoder)
 
 
 # =============================================================================

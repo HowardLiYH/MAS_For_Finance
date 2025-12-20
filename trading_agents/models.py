@@ -66,18 +66,20 @@ class ExecutionSummary:
     - Leverage_Size, Liquidation_Price, Execution_Expired_Time
     """
     order_id: str
-    timestamp: datetime
-    style: str
-    order_type: str              # MARKET | LIMIT
     direction: str               # LONG | SHORT
-    position_size: float
-    leverage: float
+    order_type: str              # MARKET | LIMIT
     entry_price: float
     take_profit: float
     stop_loss: float
+    position_size: float
+    leverage: float
+    timestamp: Optional[datetime] = None
+    style: str = "default"
     liquidation_price: Optional[float] = None
     closed_price: Optional[float] = None
     execution_expired_time: Optional[datetime] = None
+    confidence: float = 0.5      # Confidence score for the trade
+    reasoning: str = ""          # Explanation for the trade
 
 
 @dataclass
